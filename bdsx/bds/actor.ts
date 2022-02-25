@@ -469,18 +469,39 @@ export class Actor extends AbstractClass {
     getActorIdentifier():ActorDefinitionIdentifier {
         abstract();
     }
+
+    /**
+     * @deprecated matching to official name
+     */
+    getMainhandSlot(): ItemStack {
+        return this.getCarriedItem();
+    }
     /**
      * Returns the item currently held by the entity
      */
-    getMainhandSlot(): ItemStack {
+    getCarriedItem(): ItemStack {
         abstract();
     }
+    /**
+     * Sets the item currently held by the entity
+     */
+    setCarriedItem(item: ItemStack): void {
+        abstract();
+    }
+
     /**
      * Returns the item currently in the entity's offhand slot
      */
     getOffhandSlot(): ItemStack {
         abstract();
     }
+    /**
+     * Sets the item currently in the entity's offhand slot
+     */
+    setOffhandSlot(item: ItemStack): void {
+        abstract();
+    }
+
     /**
      * @alias instanceof Mob
      */
