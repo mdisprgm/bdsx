@@ -1,14 +1,14 @@
+import * as colors from 'colors';
 import { asm, FloatRegister, Register, X64Assembler } from "./assembler";
-import { Config } from "./config";
-import { bedrock_server_exe, NativePointer, pdb, StaticPointer, VoidPointer } from "./core";
+import { proc } from "./bds/symbols";
+import { NativePointer, StaticPointer, VoidPointer } from "./core";
 import { disasm } from "./disassembler";
 import { dll } from "./dll";
-import { fsutil } from "./fsutil";
 import { hacktool } from "./hacktool";
 import { FunctionFromTypes_js, FunctionFromTypes_np, makefunc, MakeFuncOptions, ParamType } from "./makefunc";
+import { pdblegacy } from "./pdblegacy";
 import { MemoryUnlocker } from "./unlocker";
 import { hex, memdiff, memdiff_contains } from "./util";
-import * as colors from 'colors';
 
 const FREE_REGS:Register[] = [
     Register.rax,
@@ -379,27 +379,38 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
     }
 
     /**
+     * make the native function as a JS function.
+     * it uses a vftable
+     *
+     * wrapper codes are not deleted permanently.
+     * do not use it dynamically.
+     *
+     * @param returnType *_t or *Pointer
+     * @param params *_t or *Pointer
+     */
+    jsv<OPTS extends MakeFuncOptions<any>|null, RETURN extends ParamType, PARAMS extends ParamType[]>(
+        this:ProcHacker<typeof proc>,
+        vftable: keyof T,
+        key: keyof T,
+        returnType:RETURN,
+        opts?: OPTS,
+        ...params: PARAMS):
+        FunctionFromTypes_js<[number, number?], OPTS, PARAMS, RETURN> {
+        const map = this.map.vftable[vftable+'\\'+key];
+        return makefunc.js(map, returnType, opts, ...params);
+    }
+
+    /**
      * get symbols from cache.
      * if symbols don't exist in cache. it reads pdb.
-     * @param undecorate if it's set with UNDNAME_*, it uses undecorated(demangled) symbols
+     * @deprecated no need to load. use global procHacker
      */
-    static load<KEY extends string, KEYS extends readonly [...KEY[]]>(cacheFilePath:string, names:KEYS, undecorate?:number):ProcHacker<{[key in KEYS[number]]: NativePointer}> {
-        if (Config.WINE) {
-            let matched = false;
-            try {
-                const firstLine = fsutil.readFirstLineSync(cacheFilePath);
-                matched = firstLine === bedrock_server_exe.md5;
-            } catch (err) {
-                if (err.code === 'ENOENT') {
-                    // not found
-                } else {
-                    throw err;
-                }
-            }
-            if (!matched) {
-                console.error(colors.yellow('[BDSX] PDB cache may not be generated on Linux. Please generate it on Windows and copy the file to the Linux machine'));
-            }
-        }
-        return new ProcHacker(pdb.getList(cacheFilePath, {}, names, false, undecorate));
+    static load<KEY extends string, KEYS extends readonly [...KEY[]]>(cacheFilePath:string, names:KEYS, undecorate?:number):ProcHacker<Record<string, NativePointer>> {
+        return new ProcHacker(pdblegacy.getList(cacheFilePath, {}, names, false, undecorate));
     }
 }
+
+/**
+ * @remark Backward compatibility cannot be guaranteed. The symbol name can be changed by BDS updating.
+ */
+export const procHacker = new ProcHacker(proc);

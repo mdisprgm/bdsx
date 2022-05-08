@@ -1,19 +1,18 @@
 import { abstract, BuildPlatform } from "../common";
-import { AbstractClass, nativeClass } from "../nativeclass";
 import type { Abilities } from "./abilities";
-import { ActorUniqueID, DimensionId, Mob } from "./actor";
+import { ActorDamageSource, ActorUniqueID, DimensionId, Mob } from "./actor";
 import { AttributeId, AttributeInstance } from "./attribute";
 import { Block } from "./block";
 import type { BlockPos, Vec3 } from "./blockpos";
 import type { CommandPermissionLevel } from "./command";
 import { Certificate } from "./connreq";
+import { HashedString } from "./hashedstring";
 import { ArmorSlot, ContainerId, Item, ItemStack, PlayerInventory, PlayerUIContainer, PlayerUISlot } from "./inventory";
 import type { NetworkIdentifier } from "./networkidentifier";
 import type { Packet } from "./packet";
-import { BossEventPacket, ScorePacketInfo, SetDisplayObjectivePacket, SetScorePacket, SetTitlePacket, TextPacket, TransferPacket } from "./packets";
+import { BossEventPacket, PlayerListEntry as _PlayerListEntry, PlaySoundPacket, ScorePacketInfo, SetDisplayObjectivePacket, SetScorePacket, SetTitlePacket, TextPacket, TransferPacket } from "./packets";
 import { DisplaySlot } from "./scoreboard";
-import { serverInstance } from "./server";
-import type { SerializedSkin } from "./skin";
+import { SerializedSkin } from "./skin";
 
 export class Player extends Mob {
     abilities: Abilities;
@@ -29,17 +28,6 @@ export class Player extends Mob {
     deviceId: string;
 
     protected _setName(name: string): void {
-        abstract();
-    }
-
-    /**
-     * Adds an item to the player's inventory
-     * @remarks Player inventory will not be updated. Use ServerPlayer.sendInventory() to update it.
-     *
-     * @param itemStack - Item to add
-     * @returns {boolean} Whether the item has been added successfully (Full inventory can be a cause of failure)
-     */
-    addItem(itemStack: ItemStack): boolean {
         abstract();
     }
 
@@ -61,6 +49,13 @@ export class Player extends Mob {
      * @param name - New name
      */
     setName(name: string): void {
+        abstract();
+    }
+
+    /**
+     * Updates the player list to all players
+     */
+    updatePlayerList(): void {
         abstract();
     }
 
@@ -95,20 +90,6 @@ export class Player extends Mob {
     }
 
     /**
-     * Returns the item currently held by the player
-     */
-    getMainhandSlot(): ItemStack {
-        abstract();
-    }
-
-    /**
-     * Returns the item currently in the player's offhand slot
-     */
-    getOffhandSlot(): ItemStack {
-        abstract();
-    }
-
-    /**
      * Returns the player's permission level
      * @see PlayerPermission
      */
@@ -130,6 +111,13 @@ export class Player extends Mob {
      * @param item - Item to start the cooldown on
      */
     startCooldown(item: Item): void {
+        abstract();
+    }
+
+    /**
+     * Returns a tick. If you want seconds, divide by 20
+     */
+    getItemCooldownLeft(cooldownType:HashedString): number {
         abstract();
     }
     /**
@@ -338,6 +326,13 @@ export class Player extends Mob {
     }
 
     /**
+     * Reset the XP levels of the player
+     */
+    resetExperienceLevels(): void {
+        abstract();
+    }
+
+    /**
      * Subtracts XP points from the player
      *
      * @param xp - between 1 and the current XP points for the level
@@ -393,6 +388,55 @@ export class Player extends Mob {
     getPlatform(): BuildPlatform {
         abstract();
     }
+    /**
+     * Returns the player's XUID
+     */
+    getXuid(): string {
+        abstract();
+    }
+    forceAllowEating(): boolean {
+        abstract();
+    }
+    getSpeed(): number {
+        abstract();
+    }
+    hasOpenContainer(): boolean {
+        abstract();
+    }
+    /**
+     * Returns whether the player is hungry.
+     */
+    isHungry(): boolean {
+        abstract();
+    }
+    /**
+     * Returns whether the player is hurt.
+     */
+    isHurt(): boolean {
+        abstract();
+    }
+    /**
+     * Returns whether the player has spawned in the Level. Different from `isAlive`.
+     * if true, it's a valid entity.
+     */
+    isSpawned(): boolean {
+        abstract();
+    }
+    /**
+     * Returns whether the player is loading in login screen.
+     * if true, it's not a valid entity.
+     */
+    isLoading(): boolean {
+        abstract();
+    }
+    /**
+     * Returns whether the player is initialized.
+     * if true, it's a valid entity.
+     * it checks {@link isSpawned}, and {@link isLoading} etc. internally.
+     */
+    isPlayerInitialized(): boolean {
+        abstract();
+    }
 }
 
 namespace RawTextObject {
@@ -400,7 +444,7 @@ namespace RawTextObject {
         text: string;
     }
     export interface Translate {
-        translte: string;
+        translate: string;
         with?: string[];
     }
     export interface Score {
@@ -443,6 +487,10 @@ export class ServerPlayer extends Player {
         abstract();
     }
 
+    resendAllChunks(): void {
+        abstract();
+    }
+
     /**
      * Sends a packet to the player
      *
@@ -450,19 +498,6 @@ export class ServerPlayer extends Player {
      */
     sendNetworkPacket(packet: Packet): void {
         abstract();
-    }
-
-    protected _sendInventory(shouldSelectSlot: boolean): void {
-        abstract();
-    }
-    /**
-     * Updates the player's inventory
-     * @remarks The shouldSelectSlot parameter seems to be pointless
-     *
-     * @param shouldSelectSlot - Defines whether the player should select the currently selected slot (?)
-     */
-    sendInventory(shouldSelectSlot: boolean = false): void {
-        serverInstance.nextTick().then(() => this._sendInventory(shouldSelectSlot));
     }
 
     /**
@@ -806,17 +841,49 @@ export class ServerPlayer extends Player {
         this.sendNetworkPacket(pk);
         pk.dispose();
     }
-}
 
-@nativeClass(0x2f0)
-export class PlayerListEntry extends AbstractClass {
-    static constructWith(player: Player): PlayerListEntry {
+    /**
+     * Plays a sound to the player
+     *
+     * @param soundName - Sound name, like "random.burp". See {@link https://minecraft.fandom.com/wiki/Sounds.json/Bedrock_Edition_values}
+     * @param pos - Position where the sound is played (defaults to player position)
+     * @param volume - Volume of the sound (defaults to 1)
+     * @param pitch - Pitch of the sound (defaults to 1)
+     */
+    playSound(soundName: string, pos: {x:number,y:number,z:number} = this.getPosition(), volume: number = 1.0, pitch: number = 1.0): void {
+        const pk = PlaySoundPacket.allocate();
+        pk.soundName = soundName;
+        pk.pos.x = pos.x * 8;
+        pk.pos.y = pos.y * 8;
+        pk.pos.z = pos.z * 8;
+        pk.volume = volume;
+        pk.pitch = pitch;
+        this.sendNetworkPacket(pk);
+        pk.dispose();
+    }
+
+    getInputMode(): InputMode {
         abstract();
     }
-    /** @deprecated */
-    static create(player: Player): PlayerListEntry {
-        return PlayerListEntry.constructWith(player);
+    setInputMode(mode: InputMode): void {
+        abstract();
     }
+    die(damageSource: ActorDamageSource): void {
+        this.setAttribute(AttributeId.Health, 0);
+        return super.die(damageSource);
+    }
+}
+
+/** @deprecated Import from `bdsx/bds/packets` instead */
+export const PlayerListEntry = _PlayerListEntry;
+/** @deprecated Import from `bdsx/bds/packets` instead */
+export type PlayerListEntry = _PlayerListEntry;
+
+export enum InputMode {
+    Mouse = 1,
+    Touch = 2,
+    GamePad = 3,
+    MotionController = 4,
 }
 
 /**
@@ -829,6 +896,7 @@ export enum GameType {
     SurvivalSpectator,
     CreativeSpectator,
     Default,
+    Spectator,
 }
 
 /**

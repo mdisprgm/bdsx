@@ -1,16 +1,19 @@
 import { abstract } from "../common";
 import { VoidPointer } from "../core";
 import { CxxVector } from "../cxxvector";
-import { AbstractClass, nativeClass, NativeClass, nativeField } from "../nativeclass";
-import { bin64_t, bool_t, CxxString, CxxStringWith8Bytes, int16_t, int32_t, uint32_t, uint8_t } from "../nativetype";
+import { AbstractClass, nativeClass, NativeClass, nativeField, NativeStruct } from "../nativeclass";
+import { bin64_t, bool_t, CxxString, CxxStringWith8Bytes, int16_t, int32_t, NativeType, uint32_t, uint8_t } from "../nativetype";
 import { ActorRuntimeID } from "./actor";
 import { Block, BlockLegacy } from "./block";
 import { BlockPos, Vec3 } from "./blockpos";
 import { CommandName } from "./commandname";
 import type { ItemEnchants } from "./enchants";
+import { HashedString } from "./hashedstring";
+import type { ItemComponent } from "./item_component";
 import type { BlockPalette } from "./level";
 import { CompoundTag, NBT } from "./nbt";
 import type { ServerPlayer } from "./player";
+import { proc } from "./symbols";
 
 /**
  * Values from 1 to 100 are for a player's container counter.
@@ -102,10 +105,10 @@ export class Item extends NativeClass {
         abstract();
     }
     getCommandName():string {
-        const names = this.getCommandNames();
-        const name = names.get(0);
+        const names = this.getCommandNames2();
+        const name = names.get(0)?.name;
         names.destruct();
-        if (name === null) throw Error(`item has not any names`);
+        if (name == null) throw Error(`item has not any names`);
         return name;
     }
     /** @deprecated Use `this.getCommandNames2()` instead */
@@ -141,6 +144,12 @@ export class Item extends NativeClass {
     setAllowOffhand(value:boolean):void {
         abstract();
     }
+    getSerializedName():CxxString {
+        abstract();
+    }
+    getCooldownType(): HashedString {
+        abstract();
+    }
 }
 
 /**
@@ -149,7 +158,25 @@ export class Item extends NativeClass {
 export class ArmorItem extends Item {
 }
 
-export class ComponentItem extends NativeClass {
+export class ComponentItem extends Item {
+    getComponent(identifier:string):ItemComponent{
+        const hashedStr = HashedString.construct();
+        hashedStr.set(identifier);
+
+        const component = this._getComponent(hashedStr);
+        hashedStr.destruct();
+
+        return component;
+    }
+    protected _getComponent(identifier:HashedString): ItemComponent{
+        abstract();
+    }
+    buildNetworkTag():CompoundTag {
+        abstract();
+    }
+    initializeFromNetwork(tag:CompoundTag): void {
+        abstract();
+    }
 }
 
 @nativeClass(0x88)
@@ -209,6 +236,9 @@ export class ItemStackBase extends NativeClass {
         abstract();
     }
     isNull():boolean {
+        abstract();
+    }
+    setNull():void {
         abstract();
     }
     getAmount():number {
@@ -288,6 +318,9 @@ export class ItemStackBase extends NativeClass {
     sameItem(item:ItemStack):boolean {
         abstract();
     }
+    sameItemAndAux(item: ItemStack): boolean {
+        abstract();
+    }
     isStackedByData():boolean {
         abstract();
     }
@@ -336,7 +369,11 @@ export class ItemStackBase extends NativeClass {
     getMaxDamage():number {
         abstract();
     }
-    getComponentItem():ComponentItem {
+
+    /**
+     * Only custom items return ComponentItem
+     */
+    getComponentItem():ComponentItem | null {
         abstract();
     }
     getDamageValue():number {
@@ -365,8 +402,9 @@ export class ItemStackBase extends NativeClass {
     }
 }
 
-@nativeClass(0x90)
+@nativeClass(0xa0)
 export class ItemStack extends ItemStackBase {
+    static readonly EMPTY_ITEM: ItemStack = proc["?EMPTY_ITEM@ItemStack@@2V1@B"].as(ItemStack);
     /**
      * @param itemName Formats like 'minecraft:apple' and 'apple' are both accepted, even if the name does not exist, it still returns an ItemStack
      */
@@ -386,24 +424,55 @@ export class ItemStack extends ItemStackBase {
         abstract();
     }
 
-    protected _cloneItem(itemStack: ItemStack):void {
+    clone():ItemStack;
+
+    /**
+     * @deprecated use clone()
+     */
+    clone(itemStack: ItemStack):void;
+
+    clone(itemStack?: ItemStack):ItemStack|void {
         abstract();
     }
+    /**
+     * @deprecated use clone()
+     */
     cloneItem(): ItemStack {
         const itemStack = ItemStack.constructWith("minecraft:air");
-        this._cloneItem(itemStack);
+        this.clone(itemStack);
         return itemStack;
     }
 }
 
 export class Container extends NativeClass {
+    addItem(item:ItemStack):void {
+        abstract();
+    }
+    addItemToFirstEmptySlot(item:ItemStack):boolean {
+        abstract();
+    }
     getSlots():CxxVector<ItemStack> {
+        abstract();
+    }
+    getItem(slot:number):ItemStack {
         abstract();
     }
     getItemCount(compare:ItemStack):int32_t {
         abstract();
     }
     getContainerType():ContainerType {
+        abstract();
+    }
+    hasRoomForItem(item:ItemStack):boolean {
+        abstract();
+    }
+    isEmpty():boolean {
+        abstract();
+    }
+    removeAllItems():void {
+        abstract();
+    }
+    removeItem(slot:number, count:number):void {
         abstract();
     }
     setCustomName(name:string):void {
@@ -430,12 +499,64 @@ export class PlayerUIContainer extends SimpleContainer {
 }
 
 export enum PlayerUISlot {
-    CursorSelected,
+    CursorSelected = 0,
+    AnvilInput = 1,
+    AnvilMaterial = 2,
+    StoneCutterInput = 3,
+    Trade2Ingredient1 = 4,
+    Trade2Ingredient2 = 5,
+    TradeIngredient1 = 6,
+    TradeIngredient2 = 7,
+    MaterialReducerInput = 8,
+    LoomInput = 9,
+    LoomDye = 10,
+    LoomMaterial = 11,
+    CartographyInput = 12,
+    CartographyAdditional = 13,
+    EnchantingInput = 14,
+    EnchantingMaterial = 15,
+    GrindstoneInput = 16,
+    GrindstoneAdditional = 17,
+    CompoundCreatorInput1 = 18,
+    CompoundCreatorInput2 = 19,
+    CompoundCreatorInput3 = 20,
+    CompoundCreatorInput4 = 21,
+    CompoundCreatorInput5 = 22,
+    CompoundCreatorInput6 = 23,
+    CompoundCreatorInput7 = 24,
+    CompoundCreatorInput8 = 25,
+    CompoundCreatorInput9 = 26,
+    BeaconPayment = 27,
+    Crafting2x2Input1 = 28,
+    Crafting2x2Input2 = 29,
+    Crafting2x2Input3 = 30,
+    Crafting2x2Input4 = 31,
+    Crafting3x3Input1 = 32,
+    Crafting3x3Input2 = 33,
+    Crafting3x3Input3 = 34,
+    Crafting3x3Input4 = 35,
+    Crafting3x3Input5 = 36,
+    Crafting3x3Input6 = 37,
+    Crafting3x3Input7 = 38,
+    Crafting3x3Input8 = 39,
+    Crafting3x3Input9 = 40,
+    MaterialReducerOutput1 = 41,
+    MaterialReducerOutput2 = 42,
+    MaterialReducerOutput3 = 43,
+    MaterialReducerOutput4 = 44,
+    MaterialReducerOutput5 = 45,
+    MaterialReducerOutput6 = 46,
+    MaterialReducerOutput7 = 47,
+    MaterialReducerOutput8 = 48,
+    MaterialReducerOutput9 = 49,
+    CreatedItemOutput = 50,
+    SmithingTableInput = 51,
+    SmithingTableMaterial = 52,
 }
 
 @nativeClass(null)
 export class PlayerInventory extends AbstractClass {
-    @nativeField(Inventory.ref(), 0xB0) // accessed in PlayerInventory::getSlots when calling Container::getSlots
+    @nativeField(Inventory.ref(), 0xC0) // accessed in PlayerInventory::addItem
     container:Inventory;
 
     addItem(itemStack:ItemStack, linkEmptySlot:boolean):boolean {
@@ -465,8 +586,11 @@ export class PlayerInventory extends AbstractClass {
     getSlotWithItem(itemStack:ItemStack, checkAux:boolean, checkData:boolean):number {
         abstract();
     }
+    /**
+     * @deprecated Use container.getSlots();
+     */
     getSlots():CxxVector<ItemStack> {
-        abstract();
+        return this.container.getSlots();
     }
     selectSlot(slot:number, containerId:ContainerId):void {
         abstract();
@@ -498,7 +622,7 @@ export enum InventorySourceFlags {
 }
 
 @nativeClass()
-export class InventorySource extends NativeClass {
+export class InventorySource extends NativeStruct {
     @nativeField(int32_t)
     type:InventorySourceType;
     @nativeField(int32_t)
@@ -522,16 +646,24 @@ export class ItemDescriptor extends AbstractClass {
 export class ItemStackNetIdVariant extends AbstractClass {
 }
 
-@nativeClass(0x80)
-export class NetworkItemStackDescriptor extends NativeClass {
+@nativeClass(0x98)
+export class NetworkItemStackDescriptor extends AbstractClass {
     @nativeField(ItemDescriptor)
     readonly descriptor:ItemDescriptor;
-    @nativeField(ItemStackNetIdVariant, 0x54) // accessed in NetworkItemStackDescriptor::tryGetServerNetId
+    @nativeField(ItemStackNetIdVariant, 0x58) // accessed in NetworkItemStackDescriptor::tryGetServerNetId
     readonly id:ItemStackNetIdVariant;
-    @nativeField(CxxString, 0x60)
+    /** @deprecated There seems to be no string inside NetworkItemStackDescriptor anymore */
+    @nativeField(CxxString, 0x64)
     _unknown:CxxString;
 
     static constructWith(itemStack:ItemStack):NetworkItemStackDescriptor {
+        abstract();
+    }
+
+    /**
+     * Calls move constructor of NetworkItemStackDescriptor for `this`
+     */
+    [NativeType.ctor_move](temp: NetworkItemStackDescriptor): void {
         abstract();
     }
 }
@@ -543,13 +675,13 @@ export class InventoryAction extends AbstractClass {
     @nativeField(uint32_t)
     slot:uint32_t;
     @nativeField(NetworkItemStackDescriptor)
-    fromDesc:NetworkItemStackDescriptor;
+    fromDesc:NetworkItemStackDescriptor; // 0x10
     @nativeField(NetworkItemStackDescriptor)
-    toDesc:NetworkItemStackDescriptor;
+    toDesc:NetworkItemStackDescriptor; // 0xa8
     @nativeField(ItemStack)
-    from:ItemStack;
+    from:ItemStack; // 0x140
     @nativeField(ItemStack)
-    to:ItemStack;
+    to:ItemStack; // 0x1e0
 }
 
 @nativeClass(0x18)
@@ -597,7 +729,7 @@ export class ComplexInventoryTransaction extends AbstractClass {
     vftable:VoidPointer;
     @nativeField(uint8_t)
     type:ComplexInventoryTransaction.Type;
-    @nativeField(InventoryTransaction, 0x10)
+    @nativeField(InventoryTransaction)
     data:InventoryTransaction;
 
     isItemUseTransaction():this is ItemUseInventoryTransaction {
@@ -649,7 +781,7 @@ export class ItemUseInventoryTransaction extends ComplexInventoryTransaction {
     face:int32_t;
     @nativeField(int32_t)
     slot:int32_t;
-    @nativeField(NetworkItemStackDescriptor, {offset: 0x04, relative: true})
+    @nativeField(NetworkItemStackDescriptor)
     readonly descriptor:NetworkItemStackDescriptor;
     @nativeField(Vec3)
     readonly fromPos:Vec3;

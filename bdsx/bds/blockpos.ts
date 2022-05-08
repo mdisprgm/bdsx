@@ -1,6 +1,8 @@
 import { CommandParameterType } from "../commandparam";
-import { nativeClass, NativeClass, nativeField } from "../nativeclass";
+import { abstract } from "../common";
+import { nativeClass, nativeField, NativeStruct } from "../nativeclass";
 import { bin64_t, bool_t, float32_t, int32_t, NativeType, uint16_t, uint8_t } from "../nativetype";
+import { procHacker } from "../prochacker";
 
 export enum Facing {
     Down,
@@ -9,11 +11,16 @@ export enum Facing {
     South,
     West,
     East,
+
     Max,
 }
 
+export namespace Facing {
+    export const convertYRotationToFacingDirection: (yRotation: number) => number = procHacker.js("?convertYRotationToFacingDirection@Facing@@SAEM@Z", uint8_t, null, float32_t);
+}
+
 @nativeClass()
-export class BlockPos extends NativeClass {
+export class BlockPos extends NativeStruct {
     @nativeField(int32_t)
     x:int32_t;
     @nativeField(int32_t)
@@ -21,17 +28,29 @@ export class BlockPos extends NativeClass {
     @nativeField(int32_t)
     z:int32_t;
 
-    set(pos:BlockPos|{x:number, y:number, z:number}):void {
+    set(pos:{x:number, y:number, z:number}):void {
         this.x = pos.x;
         this.y = pos.y;
         this.z = pos.z;
     }
 
-    static create(x:number, y:number, z:number):BlockPos {
+    relative(facing:Facing, steps:number):BlockPos {
+        abstract();
+    }
+
+    static create(pos: Vec3): BlockPos;
+    static create(x:number, y:number, z:number):BlockPos;
+    static create(a:number|{x:number, y:number, z:number}, b?:number, c?:number):BlockPos {
         const v = new BlockPos(true);
-        v.x = x;
-        v.y = y;
-        v.z = z;
+        if(typeof a === "number") {
+            v.x = a;
+            v.y = b!;
+            v.z = c!;
+        } else {
+            v.x = a.x;
+            v.y = a.y;
+            v.z = a.z;
+        }
         return v;
     }
 
@@ -40,8 +59,10 @@ export class BlockPos extends NativeClass {
     }
 }
 
+BlockPos.prototype.relative = procHacker.js("?relative@BlockPos@@QEBA?AV1@EH@Z", BlockPos, {this:BlockPos, structureReturn:true}, uint8_t, int32_t);
+
 @nativeClass()
-export class ChunkPos extends NativeClass {
+export class ChunkPos extends NativeStruct {
     @nativeField(int32_t)
     x:int32_t;
     @nativeField(int32_t)
@@ -72,7 +93,7 @@ export class ChunkPos extends NativeClass {
 }
 
 @nativeClass()
-export class ChunkBlockPos extends NativeClass {
+export class ChunkBlockPos extends NativeStruct {
     @nativeField(uint8_t)
     x:uint8_t;
     @nativeField(uint16_t)
@@ -108,7 +129,7 @@ export class ChunkBlockPos extends NativeClass {
 }
 
 @nativeClass()
-export class Vec2 extends NativeClass {
+export class Vec2 extends NativeStruct {
     @nativeField(float32_t)
     x:float32_t;
     @nativeField(float32_t)
@@ -132,7 +153,7 @@ export class Vec2 extends NativeClass {
 }
 
 @nativeClass()
-export class Vec3 extends NativeClass {
+export class Vec3 extends NativeStruct {
     @nativeField(float32_t)
     x:float32_t;
     @nativeField(float32_t)
@@ -144,6 +165,17 @@ export class Vec3 extends NativeClass {
         this.x = pos.x;
         this.y = pos.y;
         this.z = pos.z;
+    }
+
+    distance(pos:Vec3|{x:number, y:number, z:number}):number {
+        return Math.sqrt(this.distanceSq(pos));
+    }
+
+    distanceSq(pos:Vec3|{x:number, y:number, z:number}):number {
+        const xdist = (this.x - pos.x);
+        const ydist = (this.y - pos.y);
+        const zdist = (this.z - pos.z);
+        return xdist*xdist + ydist*ydist + zdist*zdist;
     }
 
     static create(x:number, y:number, z:number):Vec3 {
@@ -160,7 +192,7 @@ export class Vec3 extends NativeClass {
 }
 
 @nativeClass()
-export class RelativeFloat extends NativeClass {
+export class RelativeFloat extends NativeStruct {
     static readonly [CommandParameterType.symbol]:true;
     static readonly [NativeType.registerDirect] = true;
     @nativeField(float32_t)
