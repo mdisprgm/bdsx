@@ -1,0 +1,3 @@
+[submodule "plugins/comandgo"]
+	path = plugins/comandgo
+	url = https://github.com/mdisprgm/bdsx-comandgo
