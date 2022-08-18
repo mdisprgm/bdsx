@@ -30,6 +30,9 @@ console.log(
 
     // launch BDS
     console.log('[BDSX] bedrockServer is launching...');
+
+    require("./first");
+
     await bedrockServer.launch();
 
     // run index
