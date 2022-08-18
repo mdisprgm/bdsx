@@ -26,7 +26,6 @@ import { procHacker } from "bdsx/prochacker";
         int32_t,
         int32_t,
     )((self, name, desc, perm, flag1, flag2) => {
-        console.log(name, CommandPermissionLevel[perm]);
         if (force_unlocked.has(name)) {
             flag1 = 1; // glowing name
             perm = CommandPermissionLevel.Operator;
