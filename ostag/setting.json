@@ -1,0 +1,22 @@
+{
+    "tags": {
+        "position": "ScoreTag",
+        "permission": "MEMBER",
+        "enabled": true
+    },
+    "UNKNOWN": "UNKNOWN",
+    "ANDROID": "ANDROID",
+    "IOS": "IOS",
+    "OSX": "OSX",
+    "AMAZON": "AMAZON",
+    "GEAR_VR": "GEAR_VR",
+    "HOLOLENS": "HOLOLENS",
+    "WINDOWS_10": "WINDOWS_10",
+    "WIN32": "WIN32",
+    "DEDICATED": "DEDICATED",
+    "TVOS": "TVOS",
+    "PLAYSTATION": "PLAYSTATION",
+    "NINTENDO": "NINTENDO",
+    "XBOX": "XBOX",
+    "WINDOWS_PHONE": "WINDOWS_PHONE"
+}
