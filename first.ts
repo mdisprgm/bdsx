@@ -15,6 +15,8 @@ import { procHacker } from "bdsx/prochacker";
         "gettopsolidblock",
     ]);
 
+    const vanilla_aliases = new Map<string, string>([["gamemode", "gm"]]);
+
     const original = procHacker.hooking(
         "?registerCommand@CommandRegistry@@QEAAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@PEBDW4CommandPermissionLevel@@UCommandFlag@@3@Z",
         void_t,
@@ -30,6 +32,12 @@ import { procHacker } from "bdsx/prochacker";
             flag1 = 1; // glowing name
             perm = CommandPermissionLevel.Operator;
         }
-        return original(self, name, desc, perm, flag1, flag2);
+
+        original(self, name, desc, perm, flag1, flag2);
+
+        if (vanilla_aliases.has(name)) {
+            const alias = vanilla_aliases.get(name)!;
+            return self.registerAlias(name, alias);
+        }
     });
 }
