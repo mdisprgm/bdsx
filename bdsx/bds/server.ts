@@ -6,6 +6,7 @@ import { AbstractClass, nativeClass, nativeField } from "../nativeclass";
 import { bool_t, CxxString, uint16_t } from "../nativetype";
 import { CxxSharedPtr } from "../sharedpointer";
 import type { DimensionId } from "./actor";
+import { Bedrock } from "./bedrock";
 import type { MinecraftCommands } from "./command";
 import { Dimension } from "./dimension";
 import { Level, ServerLevel } from "./level";
@@ -47,7 +48,7 @@ export const VanilaGameModuleServer = VanillaGameModuleServer;
 export class Minecraft extends AbstractClass {
     vftable:VoidPointer;
     offset_20:VoidPointer;
-    vanillaGameModuleServer:CxxSharedPtr<VanillaGameModuleServer>; // VanilaGameModuleServer
+    vanillaGameModuleServer:CxxSharedPtr<VanillaGameModuleServer>; // VanillaGameModuleServer
     /** @deprecated Use `Minecraft::getCommands` instead */
     get commands():MinecraftCommands {
         return this.getCommands();
@@ -87,6 +88,13 @@ export class Minecraft extends AbstractClass {
      * @deprecated use bedrockServer.minecraftCommands
      */
     getCommands():MinecraftCommands {
+        abstract();
+    }
+
+    /**
+     * @deprecated it's a kind of global variable. it will generate a JS instance per access.
+     */
+    getNonOwnerPointerServerNetworkHandler(): Bedrock.NonOwnerPointer<ServerNetworkHandler>{
         abstract();
     }
 }
@@ -171,13 +179,13 @@ export class ServerInstance extends AbstractClass {
         abstract();
     }
     /**
-     * Returns the server's maxiumum player capacity
+     * Returns the server's maximum player capacity
      */
     getMaxPlayers():number {
         abstract();
     }
     /**
-     * Changes the server's maxiumum player capacity
+     * Changes the server's maximum player capacity
      */
     setMaxPlayers(count:number):void {
         abstract();

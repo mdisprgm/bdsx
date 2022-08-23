@@ -1,8 +1,10 @@
 import * as colors from 'colors';
 import * as readline from 'readline';
 import { createAbstractObject } from "./abstractobject";
+import { installMinecraftAddons } from './addoninstaller';
 import { asmcode } from "./asm/asmcode";
 import { asm, Register } from "./assembler";
+import { Bedrock } from './bds/bedrock';
 import type { CommandOutputSender, CommandPermissionLevel, CommandRegistry, MinecraftCommands } from "./bds/command";
 import { Dimension } from "./bds/dimension";
 import { GameRules } from './bds/gamerules';
@@ -11,22 +13,22 @@ import * as nimodule from './bds/networkidentifier';
 import { RakNet } from './bds/raknet';
 import * as bd_server from './bds/server';
 import { proc } from './bds/symbols';
-import { capi } from "./capi";
 import type { CommandResult, CommandResultType } from './commandresult';
 import { CANCEL, Encoding } from "./common";
 import { Config } from "./config";
-import { bedrock_server_exe, cgate, ipfilter, MultiThreadQueue, StaticPointer, uv_async, VoidPointer } from "./core";
+import { bedrock_server_exe, cgate, ipfilter, MultiThreadQueue, NativePointer, StaticPointer, uv_async, VoidPointer } from "./core";
 import { decay } from "./decay";
 import { dll } from "./dll";
 import { events } from "./event";
 import { GetLine } from "./getline";
 import { makefunc } from "./makefunc";
 import { bool_t, CxxString, int32_t, int64_as_float_t, NativeType, void_t } from "./nativetype";
+import { loadAllPlugins } from './plugins';
 import { CxxStringWrapper } from "./pointer";
 import { procHacker } from './prochacker';
 import { remapError } from "./source-map-support";
 import { MemoryUnlocker } from "./unlocker";
-import { _tickCallback } from "./util";
+import { DeferPromise, _tickCallback } from "./util";
 
 declare module 'colors' {
 
@@ -59,11 +61,10 @@ class Liner {
 
 let launched = false;
 let closed = false;
-let loadingIsFired = false;
-let openIsFired = false;
+const loadingIsFired = DeferPromise.make<void>();
+const openIsFired = DeferPromise.make<void>();
 
 const bedrockLogLiner = new Liner;
-const cmdOutputLiner = new Liner;
 
 const commandQueue = new MultiThreadQueue(CxxString[NativeType.size]);
 const commandQueueBuffer = new CxxStringWrapper(true);
@@ -96,28 +97,34 @@ function patchForStdio():void {
     }, void_t, {onError:asmcode.jsend_returnZero, name:'bedrockLogNp'}, int32_t, StaticPointer, int64_as_float_t);
     procHacker.write('?BedrockLogOut@@YAXIPEBDZZ', 0, asm().jmp64(asmcode.logHook, Register.rax));
 
-    asmcode.CommandOutputSenderHookCallback = makefunc.np((bytes, ptr)=>{
-        // void(*callback)(const char* log, size_t size)
-        const line = cmdOutputLiner.write(ptr.getString(bytes));
-        if (line === null) return;
-        if (events.commandOutput.fire(line) !== CANCEL) {
-            console.log(line);
+    asmcode.CommandOutputSenderHookCallback = makefunc.np(line=>{
+        // void(*callback)(std::string* line)
+        const lines = line.split('\n');
+        if (lines[lines.length-1].length === 0) lines.pop();
+
+        for (const line of lines) {
+            if (events.commandOutput.fire(line) !== CANCEL) {
+                console.log(line);
+            }
         }
-    }, void_t, {onError: asmcode.jsend_returnZero, name:`CommandOutputSenderHookCallback`}, int64_as_float_t, StaticPointer);
-    procHacker.patching('hook-command-output', '?send@CommandOutputSender@@UEAAXAEBVCommandOrigin@@AEBVCommandOutput@@@Z', 0x1B0, asmcode.CommandOutputSenderHook, Register.rax, true, [
-        0xE8, 0xFF, 0xFF, 0xFF, 0xFF,               // call <bedrock_server.class std::basic_ostream<char,struct std::char_traits<char> > & __ptr64 __cdecl std::_Insert_string<char,struct std::char_traits<char>,unsigned __int64>(class std::basic_ostream<char,struct std::char_traits<char> > & __ptr64,char const * __ptr64 const,uns>
-        0x48, 0x8D, 0x15, 0xFF, 0xFF, 0xFF, 0xFF,   // lea rdx,qword ptr ds:[<class std::basic_ostream<char,struct std::char_traits<char> > & __ptr64 __cdecl std::flush<char,struct std::char_traits<char> >(class std::basic_ostream<char,struct std::char_traits<char> > & __ptr64)>]
-        0x48, 0x8B, 0xC8,                           // mov rcx,rax
-        0xFF, 0x15, 0xFF, 0xFF, 0xFF, 0xFF,         // call qword ptr ds:[<&??5?$basic_istream@DU?$char_traits@D@std@@@std@@QEAAAEAV01@P6AAEAV01@AEAV01@@Z@Z>]
-    ], [1, 5,  8, 12,  17, 21]);
+    }, void_t, {onError: asmcode.jsend_returnZero, name:`CommandOutputSenderHookCallback`}, CxxString);
+    procHacker.patching('hook-command-output', '?send@CommandOutputSender@@UEAAXAEBVCommandOrigin@@AEBVCommandOutput@@@Z', 0x58, asmcode.CommandOutputSenderHook, Register.rdx, true, [
+        0x4C, 0x8B, 0x40, 0x10,       // mov r8,qword ptr ds:[rax+10]
+        0x48, 0x83, 0x78, 0x18, 0x10, // cmp qword ptr ds:[rax+18],10
+        0x72, 0x03,                   // jb bedrock_server.7FF7440A79A6
+        0x48, 0x8B, 0x00,             // mov rax,qword ptr ds:[rax]
+        0x48, 0x8B, 0xD0,             // mov rdx,rax
+        0x48, 0x8B, 0xCB,             // mov rcx,rbx
+        0xE8, null, null, null, null, // call <bedrock_server.class std::basic_ostream<char,struct std::char_traits<char> > & __ptr64 __cdecl std::_Insert_string<char,struct std::char_traits<char>,unsigned __int64>(class std::basic
+    ]);
 
     // hook stdin
     asmcode.commandQueue = commandQueue;
     asmcode.MultiThreadQueueTryDequeue = MultiThreadQueue.tryDequeue;
     procHacker.patching('hook-stdin-command', '?getLine@ConsoleInputReader@@QEAA_NAEAV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z', 0, asmcode.ConsoleInputReader_getLine_hook, Register.rax, false, [
-        0xE9, 0xFF, 0xFF, 0xFF, 0xFF,  // jmp SPSCQueue::tryDequeue
+        0xE9, null, null, null, null,  // jmp SPSCQueue::tryDequeue
         0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, // int3 ...
-    ], [1, 5]);
+    ]);
 
     // remove original stdin thread
     const justReturn = asm().ret().buffer();
@@ -188,8 +195,10 @@ function _launch(asyncResolve:()=>void):void {
         decay(bedrockServer.gameRules);
         decay(bedrockServer.rakPeer);
         decay(bedrockServer.commandOutputSender);
+        bedrockServer.nonOwnerPointerServerNetworkHandler.dispose();
+        decay(bedrockServer.nonOwnerPointerServerNetworkHandler);
     }, void_t);
-    asmcode.gameThreadInner = proc['<lambda_5fb5cb6c28312d2ba094a9a2ee0e4913>::operator()'];
+    asmcode.gameThreadInner = proc['<lambda_09545ac3fb7d475932bfc25c15253480>::operator()']; // caller of ServerInstance::_update
     asmcode.free = dll.ucrtbase.free.pointer;
 
     // hook game thread
@@ -197,7 +206,7 @@ function _launch(asyncResolve:()=>void):void {
 
     procHacker.patching(
         'hook-game-thread',
-        'std::thread::_Invoke<std::tuple<<lambda_5fb5cb6c28312d2ba094a9a2ee0e4913> >,0>', // caller of ServerInstance::_update
+        'std::thread::_Invoke<std::tuple<<lambda_09545ac3fb7d475932bfc25c15253480> >,0>', // caller of ServerInstance::_update
         6,
         asmcode.gameThreadHook, // original depended
         Register.rax,
@@ -215,8 +224,9 @@ function _launch(asyncResolve:()=>void):void {
     patchForStdio();
 
     // seh wrapped main
+    bedrock_server_exe.args.as(NativePointer).setPointer(null, 8); // remove options
     asmcode.bedrock_server_exe_args = bedrock_server_exe.args;
-    asmcode.bedrock_server_exe_argc = bedrock_server_exe.argc;
+    asmcode.bedrock_server_exe_argc = 1; // bedrock_server_exe.argc;
     asmcode.bedrock_server_exe_main = bedrock_server_exe.main;
     asmcode.finishCallback = makefunc.np(finishCallback, void_t);
 
@@ -230,15 +240,15 @@ function _launch(asyncResolve:()=>void):void {
     // call main as a new thread
     // main will create a game thread.
     // and bdsx will hijack the game thread and run it on the node thread.
-    const [threadHandle] = capi.createThread(asmcode.wrapped_main, null);
+    const threadHandle = dll.kernel32.CreateThread(null, 0, asmcode.wrapped_main, null, 0, asmcode.addressof_bdsMainThreadId);
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('./bds/implements');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('./event_impl');
 
-    loadingIsFired = true;
-    events.serverLoading.fire();
+    loadingIsFired.resolve();
+    events.serverLoading.promiseFire();
     events.serverLoading.clear();
 
     // hook on update
@@ -249,26 +259,15 @@ function _launch(asyncResolve:()=>void):void {
     }, void_t, {name: 'events.serverUpdate.fire'});
 
     procHacker.patching('update-hook',
-        '<lambda_5fb5cb6c28312d2ba094a9a2ee0e4913>::operator()', // caller of ServerInstance::_update
-        0x76d, asmcode.updateWithSleep, Register.rcx, true, [
-            0xE8, 0xFF, 0xFF, 0xFF, 0xFF,  // call <bedrock_server._Query_perf_frequency>
-            0x48, 0x8B, 0xD8,  // mov rbx,rax
-            0xE8, 0xFF, 0xFF, 0xFF, 0xFF,  // call <bedrock_server._Query_perf_counter>
-            0x48, 0x99,  // cqo
-            0x48, 0xF7, 0xFB,  // idiv rbx
-            0x48, 0x69, 0xC8, 0x00, 0xCA, 0x9A, 0x3B,  // imul rcx,rax,3B9ACA00
-            0x48, 0x69, 0xC2, 0x00, 0xCA, 0x9A, 0x3B,  // imul rax,rdx,3B9ACA00
-            0x48, 0x99,  // cqo
-            0x48, 0xF7, 0xFB,  // idiv rbx
-            0x48, 0x03, 0xC1,  // add rax,rcx
-            0x48, 0x8B, 0x4c, 0x24, 0x20,  // mov rax,qword ptr ss:[rsp+20]
-            0x48, 0x2B, 0xC8,  // sub rcx,rax
-            0x48, 0x81, 0xF9, 0x88, 0x13, 0x00, 0x00,  // cmp rax,1388
-            0x7C, 0x0B,  // jl bedrock_server.7FF733FDEE76
-            0x48, 0x8D, 0x4C, 0x24, 0x20,  // lea rcx,qword ptr ss:[rsp+20]
-            0xE8, 0xFF, 0xFF, 0xFF, 0xFF,  // call <bedrock_server.void __cdecl std::this_thread::sleep_until<struct std::chrono::steady_clock,class std::chrono::duration<__int64,struct std::ratio<1,1000000000> > >(class std::chrono::time_point<struct std::chrono::steady_clock,class std::chrono::duration<__int64,struct s>
-            0x90,  // nop
-        ], [1, 5, 9, 13, 63, 67]);
+        '<lambda_09545ac3fb7d475932bfc25c15253480>::operator()', // caller of ServerInstance::_update
+        0x871, asmcode.updateWithSleep, Register.rax, true, [
+            0x48, 0x2B, 0xC8,                         // sub rcx,rax
+            0x48, 0x81, 0xF9, 0x88, 0x13, 0x00, 0x00, // cmp rcx,1388
+            0x7C, 0x0B,                               // jl bedrock_server.7FF743BA7B50
+            0x48, 0x8D, 0x4C, 0x24, 0x20,             // lea rcx,qword ptr ss:[rsp+20]
+            0xE8, null, null, null, null,             // call <bedrock_server.void __cdecl std::this_thread::sleep_until<struct std::chrono::steady_clock,class std::chrono::duration<__int64,struct std::ratio<1,1000000000> > >(class std::chrono::ti
+            0x90,                                     // nop
+        ]);
 
     // hook on script starting
     procHacker.hookingRawWithCallOriginal('?sendServerThreadStarted@ServerInstanceEventCoordinator@@QEAAXAEAVServerInstance@@@Z',
@@ -282,12 +281,13 @@ function _launch(asyncResolve:()=>void):void {
                 const minecraft = serverInstance.minecraft;
                 const dedicatedServer = serverInstance.server;
                 const level = minecraft.getLevel().as(ServerLevel);
-                const serverNetworkHandler = minecraft.getServerNetworkHandler();
+                const nonOwnerPointerServerNetworkHandler = minecraft.getNonOwnerPointerServerNetworkHandler();
                 const minecraftCommands = minecraft.getCommands();
                 const commandRegistry = minecraftCommands.getRegistry();
                 const gameRules = level.getGameRules();
                 const rakPeer = networkHandler.instance.peer;
                 const commandOutputSender = minecraftCommands.sender;
+                const serverNetworkHandler = nonOwnerPointerServerNetworkHandler.get();
 
                 Object.defineProperties(bedrockServer, {
                     serverInstance: {value: serverInstance},
@@ -296,6 +296,7 @@ function _launch(asyncResolve:()=>void):void {
                     dedicatedServer: {value: dedicatedServer},
                     level: {value: level},
                     serverNetworkHandler: {value: serverNetworkHandler},
+                    nonOwnerPointerServerNetworkHandler: {value: nonOwnerPointerServerNetworkHandler},
                     minecraftCommands: {value: minecraftCommands},
                     commandRegistry: {value: commandRegistry},
                     gameRules: {value: gameRules},
@@ -306,7 +307,7 @@ function _launch(asyncResolve:()=>void):void {
                 Object.defineProperty(bd_server, 'serverInstance', { value:serverInstance });
                 Object.defineProperty(nimodule, 'networkHandler', { value:networkHandler });
 
-                openIsFired = true;
+                openIsFired.resolve();
                 events.serverOpen.fire();
                 events.serverOpen.clear(); // it will never fire, clear it
                 asyncResolve();
@@ -329,8 +330,18 @@ function _launch(asyncResolve:()=>void):void {
             _tickCallback();
         }, void_t, {name: 'hook of shutdown'}), [Register.rcx, Register.rdx], []);
 
-    // keep ScriptEngine variables. idk why it needs.
-    // procHacker.write('MinecraftServerScriptEngine::onServerUpdateEnd', 0, asm().ret());
+    // graceful kill for Network port occupied
+    // BDS crashes at terminating on `Network port occupied`. it kills the crashing thread and keeps the node thread.
+    // and BDSX finishes at the end of the node thread.
+    asmcode.terminate = dll.ucrtbase.module.getProcAddress('terminate');
+    asmcode.ExitThread = dll.kernel32.module.getProcAddress('ExitThread');
+    procHacker.hookingRawWithoutOriginal('?terminate@details@gsl@@YAXXZ', asmcode.terminateHook);
+
+    /**
+     * send stdin to bedrockServer.executeCommandOnConsole
+     * without this, you need to control stdin manually
+     */
+    bedrockServer.DefaultStdInHandler.install();
 }
 
 const stopfunc = procHacker.js('?stop@DedicatedServer@@UEAA_NXZ', void_t, null, VoidPointer);
@@ -370,27 +381,17 @@ export namespace bedrockServer {
     export let rakPeer:RakNet.RakPeer = abstractobject;
     // eslint-disable-next-line prefer-const
     export let commandOutputSender:CommandOutputSender = abstractobject;
+    // eslint-disable-next-line prefer-const
+    export let nonOwnerPointerServerNetworkHandler:Bedrock.NonOwnerPointer<nimodule.ServerNetworkHandler> = abstractobject;
 
     Object.defineProperty(bd_server, 'serverInstance', {value: abstractobject, writable: true});
     Object.defineProperty(nimodule, 'networkHandler', {value: abstractobject, writable: true});
 
     export function withLoading():Promise<void> {
-        return new Promise(resolve=>{
-            if (loadingIsFired) {
-                resolve();
-            } else {
-                events.serverLoading.on(resolve);
-            }
-        });
+        return loadingIsFired;
     }
     export function afterOpen():Promise<void> {
-        return new Promise(resolve=>{
-            if (openIsFired) {
-                resolve();
-            } else {
-                events.serverOpen.on(resolve);
-            }
-        });
+        return openIsFired;
     }
 
     export function isLaunched():boolean {
@@ -413,15 +414,18 @@ export namespace bedrockServer {
         bedrock_server_exe.forceKill(exitCode);
     }
 
-    export function launch():Promise<void> {
-        return new Promise((resolve, reject)=>{
-            if (launched) {
-                reject(remapError(Error('Cannot launch BDS again')));
-                return;
-            }
-            launched = true;
-            _launch(resolve);
-        });
+    export async function launch():Promise<void> {
+        if (launched) {
+            throw remapError(Error('Cannot launch BDS again'));
+        }
+        launched = true;
+
+        await Promise.all([
+            loadAllPlugins(),
+            installMinecraftAddons(),
+        ]);
+
+        await new Promise<void>(_launch);
     }
 
     /**

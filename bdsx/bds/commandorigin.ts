@@ -2,13 +2,11 @@ import { BlockPos, Vec3 } from "../bds/blockpos";
 import { capi } from "../capi";
 import { abstract } from "../common";
 import { VoidPointer } from "../core";
-import { makefunc } from "../makefunc";
 import { mce } from "../mce";
 import { AbstractClass, nativeClass, nativeField, vectorDeletingDestructor } from "../nativeclass";
 import { CxxString, int32_t, NativeType, uint8_t, void_t } from "../nativetype";
-import { pdbcache } from "../pdbcache";
 import { procHacker } from "../prochacker";
-import { Actor } from "./actor";
+import { Actor, DimensionId } from "./actor";
 import type { CommandPermissionLevel, CommandPositionFloat } from "./command";
 import { JsonValue } from "./connreq";
 import { Dimension } from "./dimension";
@@ -86,7 +84,7 @@ export class CommandOrigin extends AbstractClass {
     }
 
     /**
-     * Returns the dimension of the recieved command
+     * Returns the dimension of the received command
      */
     getDimension(): Dimension {
         abstract();
@@ -102,10 +100,12 @@ export class CommandOrigin extends AbstractClass {
     /**
      * return the command result
      */
-    handleCommandOutputCallback(value:unknown & IExecuteCommandCallback['data']):void {
+    handleCommandOutputCallback(value:unknown & IExecuteCommandCallback['data'], statusCode?:number, statusMessage?:string):void {
+        if (statusCode == null) statusCode = value.statusCode;
+        if (statusMessage == null) statusMessage = value.statusMessage;
         const v = capi.malloc(JsonValue[NativeType.size]).as(JsonValue);
         v.constructWith(value);
-        handleCommandOutputCallback.call(this, v);
+        handleCommandOutputCallback.call(this, statusCode, statusMessage, v);
         v.destruct();
         capi.free(v);
     }
@@ -172,18 +172,18 @@ export class ScriptCommandOrigin extends PlayerCommandOrigin {
 export class ServerCommandOrigin extends CommandOrigin {
     static constructWith(requestId:string, level:ServerLevel, permissionLevel:CommandPermissionLevel, dimension:Dimension|null):ServerCommandOrigin {
         const ptr = new ServerCommandOrigin(true);
-        ServerCommandOrigin$ServerCommandOrigin(ptr, requestId, level, permissionLevel, dimension);
+        ServerCommandOrigin$ServerCommandOrigin(ptr, requestId, level, permissionLevel, dimension?.getDimensionId() ?? DimensionId.Overworld);
         return ptr;
     }
     static allocateWith(requestId:string, level:ServerLevel, permissionLevel:CommandPermissionLevel, dimension:Dimension|null):ServerCommandOrigin {
         const ptr = capi.malloc(ServerCommandOrigin[NativeType.size]).as(ServerCommandOrigin);
-        ServerCommandOrigin$ServerCommandOrigin(ptr, requestId, level, permissionLevel, dimension);
+        ServerCommandOrigin$ServerCommandOrigin(ptr, requestId, level, permissionLevel, dimension?.getDimensionId() ?? DimensionId.Overworld);
         return ptr;
     }
 }
 
 const ServerCommandOrigin$ServerCommandOrigin = procHacker.js('??0ServerCommandOrigin@@QEAA@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AEAVServerLevel@@W4CommandPermissionLevel@@V?$AutomaticID@VDimension@@H@@@Z', void_t, null, ServerCommandOrigin,
-    CxxString, ServerLevel, int32_t, Dimension);
+    CxxString, ServerLevel, int32_t, int32_t);
 const ServerCommandOrigin_vftable = proc["??_7ServerCommandOrigin@@6B@"];
 
 CommandOrigin.prototype[NativeType.dtor] = vectorDeletingDestructor;
@@ -230,10 +230,10 @@ CommandOrigin.prototype.getOriginType = procHacker.jsv(
     '??_7ServerCommandOrigin@@6B@', '?getOriginType@ServerCommandOrigin@@UEBA?AW4CommandOriginType@@XZ',
     uint8_t, {this: CommandOrigin});
 
-// void CommandOrigin::handleCommandOutputCallback(Json::Value &&);
+// void CommandOrigin::handleCommandOutputCallback(int, std::string &&, Json::Value &&) const
 const handleCommandOutputCallback = procHacker.jsv(
-    '??_7ScriptingCommandOrigin@@6B@', '?handleCommandOutputCallback@ScriptingCommandOrigin@@UEBAX$$QEAVValue@Json@@@Z',
-    void_t, {this: CommandOrigin}, JsonValue);
+    '??_7ScriptCommandOrigin@@6B@', '?handleCommandOutputCallback@ScriptCommandOrigin@@UEBAXH$$QEAV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@$$QEAVValue@Json@@@Z',
+    void_t, {this: CommandOrigin}, int32_t, CxxString, JsonValue);
 
 // struct CompoundTag CommandOrigin::serialize(void)
 const serializeCommandOrigin = procHacker.jsv(

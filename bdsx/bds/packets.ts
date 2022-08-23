@@ -8,7 +8,8 @@ import { bin64_t, bool_t, CxxString, CxxStringWith8Bytes, float32_t, int16_t, in
 import { ActorDefinitionIdentifier, ActorLink, ActorRuntimeID, ActorUniqueID } from "./actor";
 import { AttributeInstanceHandle } from "./attribute";
 import { BlockPos, ChunkPos, Vec2, Vec3 } from "./blockpos";
-import { ConnectionRequest } from "./connreq";
+import { ConnectionRequest, JsonValue } from "./connreq";
+import { CxxOptional } from "./cxxoptional";
 import { HashedString } from "./hashedstring";
 import { ComplexInventoryTransaction, ContainerId, ContainerType, ItemStackNetIdVariant, NetworkItemStackDescriptor } from "./inventory";
 import { CompoundTag } from "./nbt";
@@ -17,14 +18,16 @@ import type { GameType, Player } from "./player";
 import { DisplaySlot, ObjectiveSortOrder, ScoreboardId } from "./scoreboard";
 import { SerializedSkin } from "./skin";
 
+const CxxVector$string = CxxVector.make(CxxString);
+
 @nativeClass(null)
 export class LoginPacket extends Packet {
-    @nativeField(int32_t, 0x30)
+    @nativeField(int32_t)
 	protocol:int32_t;
     /**
      * it can be null if the wrong client version
      */
-    @nativeField(ConnectionRequest.ref(), 0x38)
+    @nativeField(ConnectionRequest.ref())
 	connreq:ConnectionRequest|null;
 }
 
@@ -170,7 +173,7 @@ export class TextPacket extends Packet {
     name:CxxString;
     @nativeField(CxxString)
     message:CxxString;
-    @nativeField(CxxVector.make(CxxString))
+    @nativeField(CxxVector$string)
     params:CxxVector<CxxString>;
     @nativeField(bool_t, 0x90)
     needsTranslation:bool_t;
@@ -449,6 +452,11 @@ export class MobEffectPacket extends Packet {
     // unknown
 }
 
+@nativeClass(null)
+class AttributeModifier extends AbstractClass {
+
+}
+
 @nativeClass()
 export class AttributeData extends NativeClass {
     @nativeField(float32_t)
@@ -461,12 +469,22 @@ export class AttributeData extends NativeClass {
     default:number;
     @nativeField(HashedString)
     readonly name:HashedString;
+    // TODO: clarify dummy
+    @nativeField(AttributeModifier.ref())
+    _dummy1:AttributeModifier|null;
+    @nativeField(AttributeModifier.ref())
+    _dummy2:AttributeModifier|null;
+    @nativeField(AttributeModifier.ref())
+    _dummy3:AttributeModifier|null;
 
     [NativeType.ctor]():void {
         this.min = 0;
         this.max = 0;
         this.current = 0;
         this.default = 0;
+        this._dummy1 = null;
+        this._dummy2 = null;
+        this._dummy3 = null;
     }
 }
 
@@ -492,10 +510,10 @@ export class MobEquipmentPacket extends Packet {
     runtimeId:ActorRuntimeID;
     @nativeField(NetworkItemStackDescriptor)
     readonly item:NetworkItemStackDescriptor;
-    @nativeField(uint8_t, 0xC1)
-    slot:uint8_t;
-    @nativeField(uint8_t)
-    selectedSlot:uint8_t;
+    @nativeField(int32_t)
+    slot:int32_t;
+    @nativeField(int32_t)
+    selectedSlot:int32_t;
     @nativeField(uint8_t)
     containerId:ContainerId;
 }
@@ -622,7 +640,10 @@ export class SetActorDataPacket extends Packet {
 
 @nativeClass(null)
 export class SetActorMotionPacket extends Packet {
-    // unknown
+    @nativeField(ActorRuntimeID)
+    runtimeId:ActorRuntimeID;
+    @nativeField(Vec3)
+    motion:Vec3;
 }
 
 @nativeClass(null)
@@ -894,9 +915,13 @@ export class SpawnExperienceOrbPacket extends Packet {
 }
 
 @nativeClass(null)
-export class MapItemDataPacket extends Packet {
+export class ClientboundMapItemData extends Packet {
     // unknown
 }
+/** @deprecated Use ClientboundMapItemData instead, to match to official class name*/
+export const MapItemDataPacket = ClientboundMapItemData;
+/** @deprecated Use ClientboundMapItemData instead, to match to official class name*/
+export type MapItemDataPacket = ClientboundMapItemData;
 
 @nativeClass(null)
 export class MapInfoRequestPacket extends Packet {
@@ -1038,9 +1063,9 @@ class AvailableCommandsEnumData extends AbstractClass{
 
 @nativeClass(null)
 export class AvailableCommandsPacket extends Packet {
-    @nativeField(CxxVector.make(CxxString))
+    @nativeField(CxxVector$string)
     readonly enumValues:CxxVector<CxxString>;
-    @nativeField(CxxVector.make(CxxString))
+    @nativeField(CxxVector$string)
     readonly postfixes:CxxVector<CxxString>;
     @nativeField(CxxVector.make(AvailableCommandsEnumData))
     readonly enums:CxxVector<AvailableCommandsEnumData>;
@@ -1265,8 +1290,11 @@ export type ShowModalFormPacket = ModalFormRequestPacket;
 export class ModalFormResponsePacket extends Packet {
     @nativeField(uint32_t)
     id:uint32_t;
-    @nativeField(CxxString)
-    response:CxxString;
+
+    @nativeField(CxxOptional.make(JsonValue))
+    response:CxxOptional<JsonValue>;
+    // @nativeField(CxxOptional.make(uint8_t))
+    // unknown:CxxOptional<uint8_t>;
 }
 
 @nativeClass(null)
@@ -1704,7 +1732,7 @@ export class ItemStackRequestActionTransferBase extends ItemStackRequestAction {
 export class ItemStackRequestData extends AbstractClass {
     @nativeField(int32_t, 0x08)
     clientRequestId:int32_t;
-    @nativeField(CxxVector.make(CxxString), 0x10)
+    @nativeField(CxxVector$string, 0x10)
     stringsToFilter:CxxVector<CxxString>;
     @nativeField(CxxVector.make(ItemStackRequestAction.ref()))
     actions:CxxVector<ItemStackRequestAction>;
@@ -1918,12 +1946,12 @@ export namespace NpcDialoguePacket {
 //     // unknown
 // }
 
-/**@deprecated not available */
+/** @deprecated not available */
 export class BlockPalette extends Packet {
     // unknown
 }
 
-/**@deprecated not available */
+/** @deprecated not available */
 export class VideoStreamConnect_DEPRECATED extends Packet {
     // unknown
 }
@@ -1968,6 +1996,74 @@ export class ScriptMessagePacket extends Packet {
 
 @nativeClass(null)
 export class CodeBuilderSourcePacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class TickingAreasLoadStatusPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class DimensionDataPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class AgentActionEventPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class ChangeMobPropertyPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class LessonProgressPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class RequestAbilityPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class RequestPermissionsPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(0x70)
+export class ToastRequestPacket extends Packet {
+    @nativeField(CxxString)
+    title: CxxString;
+    @nativeField(CxxString)
+    body: CxxString;
+}
+
+@nativeClass(null)
+export class UpdateAbilitiesPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class UpdateAdventureSettingsPacket extends Packet {
+    // unknown
+}
+
+@nativeClass()
+export class DeathInfoPacket extends Packet {
+    /**
+     * First: text
+     * Second: params for translating
+     */
+    @nativeField(CxxPair.make(CxxString, CxxVector$string))
+    info: CxxPair<CxxString, CxxVector<CxxString>>;
+}
+
+@nativeClass(null)
+export class EditorNetworkPacket extends Packet {
     // unknown
 }
 
@@ -2038,7 +2134,7 @@ export const PacketIdToType = {
     0x40: SimpleEventPacket,
     0x41: TelemetryEventPacket,
     0x42: SpawnExperienceOrbPacket,
-    0x43: MapItemDataPacket,
+    0x43: ClientboundMapItemData,
     0x44: MapInfoRequestPacket,
     0x45: RequestChunkRadiusPacket,
     0x46: ChunkRadiusUpdatedPacket,
@@ -2148,6 +2244,18 @@ export const PacketIdToType = {
     0xb0: PlayerStartItemCooldownPacket,
     0xb1: ScriptMessagePacket,
     0xb2: CodeBuilderSourcePacket,
+    0xb3: TickingAreasLoadStatusPacket,
+    0xb4: DimensionDataPacket,
+    0xb5: AgentActionEventPacket,
+    0xb6: ChangeMobPropertyPacket,
+    0xb7: LessonProgressPacket,
+    0xb8: RequestAbilityPacket,
+    0xb9: RequestPermissionsPacket,
+    0xba: ToastRequestPacket,
+    0xbb: UpdateAbilitiesPacket,
+    0xbc: UpdateAdventureSettingsPacket,
+    0xbd: DeathInfoPacket,
+    0xbe: EditorNetworkPacket,
 };
 export type PacketIdToType = {[key in keyof typeof PacketIdToType]:InstanceType<typeof PacketIdToType[key]>};
 

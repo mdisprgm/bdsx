@@ -1,16 +1,19 @@
+import * as colors from 'colors';
 import { bin } from "../bin";
 import { CircularDetector } from "../circulardetector";
 import type { CommandResult, CommandResultType } from "../commandresult";
 import { abstract } from "../common";
 import { StaticPointer, VoidPointer } from "../core";
 import { CxxVector } from "../cxxvector";
+import { events } from '../event';
 import { mangle } from "../mangle";
 import { AbstractClass, nativeClass, NativeClass, nativeField, NativeStruct } from "../nativeclass";
 import { bin64_t, bool_t, CxxString, float32_t, int32_t, int64_as_float_t, uint8_t } from "../nativetype";
 import { AttributeId, AttributeInstance, BaseAttributeMap } from "./attribute";
 import type { BlockSource } from "./block";
-import { Vec2, Vec3 } from "./blockpos";
+import { BlockPos, Vec2, Vec3 } from "./blockpos";
 import type { CommandPermissionLevel } from "./command";
+import { CxxOptional } from './cxxoptional';
 import type { Dimension } from "./dimension";
 import { MobEffect, MobEffectIds, MobEffectInstance } from "./effects";
 import { HashedString } from "./hashedstring";
@@ -19,7 +22,7 @@ import type { Level } from "./level";
 import { CompoundTag, NBT } from "./nbt";
 import type { NetworkIdentifier } from "./networkidentifier";
 import { Packet } from "./packet";
-import type { Player, ServerPlayer } from "./player";
+import type { Player, ServerPlayer, SimulatedPlayer } from "./player";
 
 export const ActorUniqueID = bin64_t.extends();
 export type ActorUniqueID = bin64_t;
@@ -207,7 +210,7 @@ export class ActorDefinitionIdentifier extends NativeClass {
     static constructWith(type:string|ActorType):ActorDefinitionIdentifier {
         abstract();
     }
-    /**@deprecated use {@link constructWith()} instead*/
+    /** @deprecated use {@link constructWith()} instead*/
     static create(type:string|ActorType):ActorDefinitionIdentifier {
         return ActorDefinitionIdentifier.constructWith(type as any);
     }
@@ -300,7 +303,11 @@ export enum ActorFlags {
     InLove,
     Saddled,
     Powered,
+    /**
+     * @deprecated typo.
+     */
     Ignit0ed,
+    Ignited = 0xa,
     Baby,
     Converting,
     Critical,
@@ -354,7 +361,11 @@ export enum ActorFlags {
     TransitionSitting,
     Eating,
     LayingDown,
+    /**
+     * @deprecated Typo!
+     */
     Snezing,
+    Sneezing = 0x40,
     Trusting,
     Rolling,
     Scared,
@@ -446,7 +457,7 @@ export class EntityContextBase extends AbstractClass {
     isValid():boolean {
         abstract();
     }
-    /**@deprecated use {@link isValid()} instead */
+    /** @deprecated use {@link isValid()} instead */
     isVaild(): boolean {
         return this.isValid();
     }
@@ -479,6 +490,63 @@ export class Actor extends AbstractClass {
     static tryGetFromEntity(entity:EntityContext):Actor|null {
         abstract();
     }
+
+    /**
+     * Teleports the actor to another dimension
+     * @deprecated respawn parameter deleted
+     *
+     * @param dimensionId - The dimension ID
+     * @param respawn - Indicates whether the dimension change is based on a respawn (player died in dimension)
+     *
+     * @see DimensionId
+     */
+    changeDimension(dimensionId: DimensionId, respawn: boolean): void;
+
+    /**
+     * Teleports the actor to another dimension
+     *
+     * @param dimensionId - The dimension ID
+     *
+     * @see DimensionId
+     */
+    changeDimension(dimensionId: DimensionId): void;
+
+    changeDimension(dimensionId: DimensionId, respawn?: boolean): void {
+        abstract();
+    }
+
+    /**
+     * Teleports the player to a specified position
+     * @deprecated sourceActorId deleted
+     *
+     * @remarks This function is used when entities teleport players (e.g: ender pearls). Use Actor.teleport() if you want to teleport the player.
+     *
+     * @param position - Position to teleport the player to
+     * @param shouldStopRiding - Defines whether the player should stop riding an entity when teleported
+     * @param cause - Cause of teleportation
+     * @param sourceEntityType - Entity type that caused the teleportation
+     * @param sourceActorId - ActorUniqueID of the source entity
+     *
+     * @privateRemarks causes of teleportation are currently unknown.
+     */
+    teleportTo(position: Vec3, shouldStopRiding: boolean, cause: number, sourceEntityType: number, sourceActorId: ActorUniqueID): void;
+    /**
+     * Teleports the player to a specified position
+     * @remarks This function is used when entities teleport players (e.g: ender pearls). Use Actor.teleport() if you want to teleport the player.
+     *
+     * @param position - Position to teleport the player to
+     * @param shouldStopRiding - Defines whether the player should stop riding an entity when teleported
+     * @param cause - Cause of teleportation
+     * @param sourceEntityType - Entity type that caused the teleportation
+     * @param unknown
+     *
+     * @privateRemarks causes of teleportation are currently unknown.
+     */
+    teleportTo(position: Vec3, shouldStopRiding: boolean, cause: number, sourceEntityType: number, unknown?: boolean): void;
+    teleportTo(position: Vec3, shouldStopRiding: boolean, cause: number, sourceEntityType: number, sourceActorId?: ActorUniqueID|boolean): void {
+        abstract();
+    }
+
     /**
      * Adds an item to the entity's inventory
      * @remarks Entity(Mob) inventory will not be updated. Use Mob.sendInventory() to update it.
@@ -493,12 +561,12 @@ export class Actor extends AbstractClass {
         if (!this.isPlayer()) throw Error("this is not ServerPlayer");
         this.sendNetworkPacket(packet);
     }
-    protected _getArmorValue():number{
-        abstract();
-    }
+    /**
+     * Actually it's Mob::getArmorValue in BDS.
+     * @returns the entity's armor value (as an integer)
+     */
     getArmorValue(): number{
-        if(this.isItem()) return 0;
-        return this._getArmorValue();
+        return 0;
     }
     /**
      * Returns the Dimension instance of the entity currently in
@@ -573,7 +641,18 @@ export class Actor extends AbstractClass {
     /**
      * @alias instanceof ServerPlayer
      */
-    isPlayer():this is ServerPlayer {
+    isPlayer(): this is ServerPlayer;
+    /**
+     * @deprecated use Player.prototype.isSimulated instead. A SimulatedPlayer is a ServerPlayer anyway.
+     */
+    isPlayer(includeSimulatedPlayer: boolean): this is SimulatedPlayer;
+    isPlayer(includeSimulatedPlayer: boolean = false): this is ServerPlayer {
+        abstract();
+    }
+    /**
+     * @alias instanceof SimulatedPlayer
+     */
+    isSimulatedPlayer():this is SimulatedPlayer {
         abstract();
     }
     /**
@@ -943,16 +1022,21 @@ export class Actor extends AbstractClass {
         if (entity) return this._isRidingOn(entity);
         return this._isRiding();
     }
-    protected _isPassenger(ride:ActorUniqueID): boolean {
+    protected _isPassenger(ride:Actor): boolean {
         abstract();
     }
     isPassenger(ride: ActorUniqueID): boolean;
     isPassenger(ride: Actor): boolean;
     isPassenger(ride: ActorUniqueID | Actor): boolean {
         if (ride instanceof Actor) {
-            return this._isPassenger(ride.getUniqueIdBin());
+            return this._isPassenger(ride);
+        } else {
+            const actor = Actor.fromUniqueIdBin(ride);
+            if (actor === null) {
+                throw Error('actor not found');
+            }
+            return this._isPassenger(actor);
         }
-        return this._isPassenger(ride);
     }
 
     /**
@@ -969,6 +1053,10 @@ export class Actor extends AbstractClass {
     }
 
     getArmorContainer(): SimpleContainer {
+        abstract();
+    }
+
+    getHandContainer(): SimpleContainer {
         abstract();
     }
 
@@ -1094,6 +1182,94 @@ export class Actor extends AbstractClass {
         vector.destruct();
         return arr;
     }
+
+    /**
+     * Returns whether the player is in creative mode
+     */
+    isCreative(): boolean {
+        abstract();
+    }
+
+    /**
+     * Returns whether the player is in adventure mode
+     */
+    isAdventure(): boolean {
+        abstract();
+    }
+
+    /**
+     * Returns whether the player is in survival mode
+     */
+    isSurvival(): boolean {
+        abstract();
+    }
+
+    /**
+     * Returns whether the player is in spectator mode
+     */
+    isSpectator(): boolean {
+        abstract();
+    }
+
+    /**
+     * Removes the entity
+     */
+    remove(): void {
+        abstract();
+    }
+
+    /**
+     * Returns whether the actor is angry
+     */
+    isAngry(): boolean{
+        abstract();
+    }
+
+    /**
+     * Find actor's attack target
+     * @deprecated code not found
+     */
+    findAttackTarget(): Actor|null{
+        console.error(colors.red('Actor.findAttackTarget is not available. deleted from BDS'));
+        return null;
+    }
+
+    /**
+     * Get actor targeting block
+     */
+    getBlockTarget(): BlockPos{
+        abstract();
+    }
+
+    isAttackableGamemode(): boolean {
+        abstract();
+    }
+
+    isInvulnerableTo(damageSource: ActorDamageSource): boolean {
+        abstract();
+    }
+
+    canSee(target: Actor): boolean;
+    canSee(target: Vec3): boolean;
+    canSee(target: Actor | Vec3): boolean {
+        abstract();
+    }
+
+    isValidTarget(source: Actor|null = null): boolean {
+        abstract();
+    }
+
+    canAttack(target: Actor | null, unknown = false): boolean {
+        abstract();
+    }
+
+    getLastDeathPos(): CxxOptional<BlockPos> {
+        abstract();
+    }
+
+    getLastDeathDimension(): CxxOptional<DimensionId> {
+        abstract();
+    }
 }
 mangle.update(Actor);
 
@@ -1109,6 +1285,12 @@ export class DistanceSortedActor extends NativeStruct {
 }
 
 export class Mob extends Actor {
+    /**
+     * @returns the entity's armor value (as an integer)
+     */
+    getArmorValue(): number{
+        abstract();
+    }
     /**
      * Applies knockback to the mob
      */
@@ -1135,7 +1317,7 @@ export class Mob extends Actor {
      * Updates the mob's inventory
      * @remarks used in PlayerHotbarPacket if the mob is a player
      *
-     * @param shouldSelectSlot - Defines whether the player should select the currently selected slot (?)
+     * @param shouldSelectSlot - Defines whether the sync selected slot also.
      */
     sendInventory(shouldSelectSlot:boolean = false): void {
         this._sendInventory(shouldSelectSlot);
@@ -1157,6 +1339,12 @@ export class Mob extends Actor {
         const source = isSource ? sourceOrCause : ActorDamageSource.create(sourceOrCause);
         const retval = this.hurtEffects_(source, damage, knock, ignite);
         return retval;
+    }
+    getArmorCoverPercentage(): float32_t {
+        abstract();
+    }
+    getToughnessValue(): int32_t {
+        abstract();
     }
 }
 

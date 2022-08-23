@@ -17,6 +17,61 @@ function logError(message:string):void {
 function logMessage(message:string):void {
     console.log(colors.brightGreen(`[test] ${message}`));
 }
+function deepEquals(a:unknown, b:unknown):boolean {
+    if (typeof a === 'object') {
+        if (typeof b !== 'object') return false;
+        if ((a instanceof Array) && (b instanceof Array)) {
+            if (a.length !== b.length) return false;
+            for (let i=0;i<a.length;i++) {
+                if (!deepEquals(a[i], b[i])) return false;
+            }
+            return true;
+        } else {
+            if (a === null) {
+                if (b === null) return true;
+                return false;
+            } else if (b === null) {
+                return false;
+            }
+            return deepEquals(Object.entries(a), Object.entries(b));
+        }
+    }
+    return a === b;
+}
+type RemoveOptional<T> = {[key in keyof T]-?:T[key]};
+type FilledOptions = RemoveOptional<Tester.Options>;
+const defaultOpts = {
+    stringify: (val:any)=>val+'',
+};
+function resolveOpts(opts:Tester.Options|number|undefined|((value:any)=>string), additionalStackOffset:number, fullStackOffset:number):FilledOptions {
+    if (opts == null) return {
+        stackOffset: additionalStackOffset,
+        stringify: defaultOpts.stringify,
+    };
+    switch (typeof opts) {
+    case 'number': {
+        return {
+            stackOffset: opts + additionalStackOffset - fullStackOffset,
+            stringify: defaultOpts.stringify,
+        };
+    }
+    case 'function': {
+        return {
+            stackOffset: additionalStackOffset,
+            stringify: opts,
+        };
+    }
+    }
+    if (opts.stackOffset == null) {
+        opts.stackOffset = additionalStackOffset;
+    } else {
+        opts.stackOffset += additionalStackOffset;
+    }
+    if (opts.stringify == null) {
+        opts.stringify = defaultOpts.stringify;
+    }
+    return opts as FilledOptions;
+}
 
 export class Tester {
     private state = Tester.State.Pending;
@@ -85,9 +140,10 @@ export class Tester {
         this._done(Tester.State.Failed);
     }
 
-    error(message:string, stackidx:number = 2):void {
+    error(message:string, opts?:Tester.Options|number):void {
+        const nopts = resolveOpts(opts, 2, 2);
         const stack = Error().stack!;
-        this._error(message, remapStackLine(getLineAt(stack, stackidx)).stackLine);
+        this._error(message, remapStackLine(getLineAt(stack, nopts.stackOffset)).stackLine);
     }
 
     processError(err:Error):void {
@@ -96,30 +152,43 @@ export class Tester {
         console.error(stack.slice(2).join('\n'));
     }
 
-    fail():void {
-        this.error('', 3);
+    fail(opts?:{stackOffset?:number}):void {
+        this.error('', resolveOpts(opts, 1, 3));
     }
 
-    assert(cond:boolean, message:string):void {
-        if (!cond) this.error(message, 3);
-    }
-
-    equals<T>(actual:T, expected:T, message?:string, toString:(v:T)=>string=v=>v+''):void {
-        if (actual !== expected) {
-            if (message == null) message = '';
-            else message = ', ' + message;
-            this.error(`Expected: ${toString(expected)}, Actual: ${toString(actual)}${message}`, 3);
+    assert(cond:boolean, message:string, opts?:Tester.Options):void {
+        if (!cond) {
+            this.error(message, resolveOpts(opts, 1, 3));
         }
     }
 
-    arrayEquals<T extends ArrayLike<any>>(actual:T, expected:T, message?:string, toString:(v:T)=>string=v=>v+''):void {
+    equals<T>(actual:T, expected:T, message?:string, opts?:Tester.Options|((v:any)=>string)):void {
+        if (actual !== expected) {
+            if (message == null) message = '';
+            else message = ', ' + message;
+            const nopts = resolveOpts(opts, 1, 3);
+            this.error(`Expected: ${nopts.stringify(expected)}, Actual: ${nopts.stringify(actual)}${message}`, nopts);
+        }
+    }
+
+    deepEquals<T>(actual:T, expected:T, message?:string, opts?:Tester.Options|((v:any)=>string)):void {
+        if (!deepEquals(actual, expected)) {
+            if (message == null) message = '';
+            else message = ', ' + message;
+            const nopts = resolveOpts(opts, 1, 3);
+            this.error(`Expected: ${nopts.stringify(expected)}, Actual: ${nopts.stringify(actual)}${message}`, nopts);
+        }
+    }
+
+    arrayEquals<T extends ArrayLike<any>>(actual:T, expected:T, message?:string, opts?:Tester.Options|((v:any)=>string)):void {
         if (message == null) message = '';
         else message = ', ' + message;
 
         let n = actual.length;
         const expectedLen = expected.length;
         if (n !== expectedLen) {
-            this.error(`Expected: length=${expectedLen}, Actual: length=${n}${message}`, 3);
+            const nopts = resolveOpts(opts, 1, 3);
+            this.error(`Expected: length=${expectedLen}, Actual: length=${n}${message}`, nopts);
             if (expectedLen < n) {
                 n = expectedLen;
             }
@@ -128,7 +197,8 @@ export class Tester {
             const a = actual[i];
             const e = expected[i];
             if (a !== e) {
-                this.error(`Expected: [${i}]=${toString(e)}, Actual: [${i}]=${toString(a)}${message}`, 3);
+                const nopts = resolveOpts(opts, 1, 3);
+                this.error(`Expected: [${i}]=${nopts.stringify(e)}, Actual: [${i}]=${nopts.stringify(a)}${message}`, nopts);
             }
         }
     }
@@ -245,6 +315,10 @@ export class Tester {
 }
 
 export namespace Tester {
+    export interface Options {
+        stackOffset?:number;
+        stringify?:(value:any)=>string;
+    }
     export enum State {
         Pending,
         Passed,

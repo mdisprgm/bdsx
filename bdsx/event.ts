@@ -4,9 +4,9 @@ import type { CommandContext } from "./bds/command";
 import type { NetworkIdentifier } from "./bds/networkidentifier";
 import { MinecraftPacketIds } from "./bds/packetids";
 import { CANCEL } from "./common";
-import { Event, EventEx } from "./eventtarget";
-import type { BlockAttackEvent, BlockDestroyEvent, BlockDestructionStartEvent, BlockInteractedWithEvent, BlockPlaceEvent, ButtonPressEvent, CampfireTryDouseFire, CampfireTryLightFire, ChestOpenEvent, ChestPairEvent, FallOnBlockEvent, FarmlandDecayEvent, LightningHitBlockEvent, PistonMoveEvent, ProjectileHitBlockEvent } from "./event_impl/blockevent";
-import type { EntityConsumeTotemEvent, EntityCreatedEvent, EntityDieEvent, EntityHeathChangeEvent, EntityHurtEvent, EntitySneakEvent, EntityStartRidingEvent, EntityStartSwimmingEvent, EntityStopRidingEvent, ItemUseEvent, ItemUseOnBlockEvent, PlayerAttackEvent, PlayerCritEvent, PlayerDropItemEvent, PlayerInventoryChangeEvent, PlayerJoinEvent, PlayerJumpEvent, PlayerLeftEvent, PlayerLevelUpEvent, PlayerPickupItemEvent, PlayerRespawnEvent, PlayerSleepInBedEvent, PlayerUseItemEvent, ProjectileShootEvent, SplashPotionHitEvent } from "./event_impl/entityevent";
+import { Event } from "./eventtarget";
+import type { BlockAttackEvent, BlockDestroyEvent, BlockDestructionStartEvent, BlockInteractedWithEvent, BlockPlaceEvent, ButtonPressEvent, CampfireTryDouseFire, CampfireTryLightFire, ChestOpenEvent, ChestPairEvent, FallOnBlockEvent, FarmlandDecayEvent, LightningHitBlockEvent, PistonMoveEvent, ProjectileHitBlockEvent, SculkSensorActivateEvent, SculkShriekEvent } from "./event_impl/blockevent";
+import type { EntityCarriedItemChangedEvent, EntityConsumeTotemEvent, EntityCreatedEvent, EntityDieEvent, EntityHeathChangeEvent, EntityHurtEvent, EntityKnockbackEvent, EntitySneakEvent, EntityStartRidingEvent, EntityStartSwimmingEvent, EntityStopRidingEvent, ItemUseEvent, ItemUseOnBlockEvent, PlayerAttackEvent, PlayerCritEvent, PlayerDimensionChangeEvent, PlayerDropItemEvent, PlayerInventoryChangeEvent, PlayerJoinEvent, PlayerJumpEvent, PlayerLeftEvent, PlayerLevelUpEvent, PlayerPickupItemEvent, PlayerRespawnEvent, PlayerSleepInBedEvent, PlayerUseItemEvent, ProjectileHitEvent, ProjectileShootEvent, SplashPotionHitEvent } from "./event_impl/entityevent";
 import type { LevelExplodeEvent, LevelSaveEvent, LevelTickEvent, LevelWeatherChangeEvent } from "./event_impl/levelevent";
 import type { ObjectiveCreateEvent, QueryRegenerateEvent, ScoreAddEvent, ScoreRemoveEvent, ScoreResetEvent, ScoreSetEvent } from "./event_impl/miscevent";
 import type { nethook } from "./nethook";
@@ -15,21 +15,12 @@ import { remapStack } from "./source-map-support";
 const PACKET_ID_COUNT = 0x100;
 const PACKET_EVENT_COUNT = 0x500;
 
-asmcode.addressof_enabledPacket.fill(0, 256);
+const enabledPacket = asmcode.addressof_enabledPacket;
+enabledPacket.fill(0, 256);
 
-class PacketEvent extends EventEx<(...args:any[])=>(CANCEL|void)> {
+class PacketEvent extends Event<(...args:any[])=>(CANCEL|void)> {
     constructor(public readonly id:number) {
         super();
-    }
-
-    onStarted():void {
-        const v = asmcode.getEnabledPacket(this.id);
-        asmcode.setEnabledPacket(v+1, this.id);
-    }
-
-    onCleared():void {
-        const v = asmcode.getEnabledPacket(this.id);
-        asmcode.setEnabledPacket(v-1, this.id);
     }
 }
 
@@ -37,10 +28,17 @@ function getNetEventTarget(type:events.PacketEventType, packetId:MinecraftPacket
     if ((packetId>>>0) >= PACKET_ID_COUNT) {
         throw Error(`Out of range: packetId < 0x100 (packetId=${packetId})`);
     }
-    const id = type*PACKET_ID_COUNT + packetId;
-    let target = packetAllTargets[id];
+    const idx = type*PACKET_ID_COUNT + packetId;
+    let target = packetAllTargets[idx];
     if (target !== null) return target;
-    packetAllTargets[id] = target = new PacketEvent(packetId);
+    packetAllTargets[idx] = target = new PacketEvent(packetId);
+    target.setInstaller(()=>{
+        const packetId = target!.id;
+        enabledPacket.setUint8(enabledPacket.getUint8(packetId)+1, packetId);
+    }, ()=>{
+        const packetId = target!.id;
+        enabledPacket.setUint8(enabledPacket.getUint8(packetId)-1, packetId);
+    });
     return target;
 }
 const packetAllTargets = new Array<PacketEvent|null>(PACKET_EVENT_COUNT);
@@ -91,7 +89,10 @@ export namespace events {
     export const fallOnBlock = new Event<(event: FallOnBlockEvent) => void>();
     /** Cancellable but only when the player is not in creative mode */
     export const attackBlock = new Event<(event: BlockAttackEvent) => void | CANCEL>();
-
+    /** Cancellable */
+    export const sculkShriek = new Event<(event:SculkShriekEvent) => void | CANCEL>();
+    /** Cancellable */
+    export const sculkSensorActivate = new Event<(event:SculkSensorActivateEvent) => void| CANCEL>();
     ////////////////////////////////////////////////////////
     // Entity events
 
@@ -101,7 +102,7 @@ export namespace events {
     export const entityHealthChange = new Event<(event: EntityHeathChangeEvent) => void>();
     /**
      * Not cancellable.
-     * it can be occured multiple times even it already died.
+     * it can be occurred multiple times even it already died.
      */
     export const entityDie = new Event<(event: EntityDieEvent) => void>();
     /** Not cancellable */
@@ -112,6 +113,11 @@ export namespace events {
     export const entityStartRiding = new Event<(event: EntityStartRidingEvent) => void | CANCEL>();
     /** Cancellable but the client is still exiting though it will automatically ride again after rejoin */
     export const entityStopRiding = new Event<(event: EntityStopRidingEvent) => void | CANCEL>();
+    /**
+     * Not cancellable
+     * **NOT IMPLEMENTED**
+     */
+    export const entityCarriedItemChanged = new Event<(event: EntityCarriedItemChangedEvent) => void>();
     /** Cancellable */
     export const playerAttack = new Event<(event: PlayerAttackEvent) => void | CANCEL>();
     /** Cancellable */
@@ -154,7 +160,9 @@ export namespace events {
     /** Cancellable */
     export const splashPotionHit = new Event<(event: SplashPotionHitEvent) => void | CANCEL>();
     /** Not cancellable */
-    export const projectileShoot = new Event <(event:ProjectileShootEvent) => void> ();
+    export const projectileShoot = new Event<(event: ProjectileShootEvent) => void>();
+    /** Not cancellable */
+    export const projectileHit = new Event<(event: ProjectileHitEvent) => void>();
     /** Cancellable
      * Triggered when a player sleeps in a bed.
      * Cancelling this event will prevent the player from sleeping.
@@ -164,6 +172,16 @@ export namespace events {
     export const playerJump = new Event<(event: PlayerJumpEvent) => void | CANCEL>();
     /** Not cancellable */
     export const entityConsumeTotem = new Event<(event: EntityConsumeTotemEvent) => void>();
+    /** Cancellable
+     * Triggered when a player changes dimension.
+     * Cancelling this event will prevent the player from changing dimension (e.g : entering a nether portal).
+     */
+    export const playerDimensionChange = new Event<(event: PlayerDimensionChangeEvent) => void | CANCEL>();
+    /** Cancellable.
+     * Triggered when an entity has knockback applied to them (e.g : being hit by another entity).
+     * Cancelling this event will prevent the knockback from being applied.
+     */
+    export const entityKnockback = new Event<(event: EntityKnockbackEvent) => void | CANCEL>();
     ////////////////////////////////////////////////////////
     // Level events
 
@@ -205,7 +223,7 @@ export namespace events {
     /**
      * before system.shutdown, Minecraft is alive yet
      * LoopbackPacketSender is destroyed
-     * some commands are failed on this event. use `events.serverLeave` intead.
+     * some commands are failed on this event. use `events.serverLeave` instead.
      */
     export const serverStop = new Event<()=>void>();
 
@@ -329,5 +347,4 @@ export namespace events {
       * network identifier disconnected
       */
     export const networkDisconnected = new Event<(ni:NetworkIdentifier)=>void>();
-
 }

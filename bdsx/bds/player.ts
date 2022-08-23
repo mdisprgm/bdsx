@@ -1,22 +1,27 @@
 import { abstract, BuildPlatform } from "../common";
-import type { Abilities } from "./abilities";
-import { ActorDamageSource, ActorUniqueID, DimensionId, Mob } from "./actor";
+import { mce } from "../mce";
+import { float32_t } from "../nativetype";
+import { HasStorage, Storage } from "../storage";
+import type { LayeredAbilities } from "./abilities";
+import { Actor, ActorDamageSource, DimensionId, Mob } from "./actor";
 import { AttributeId, AttributeInstance } from "./attribute";
+import { Bedrock } from "./bedrock";
 import { Block } from "./block";
-import type { BlockPos, Vec3 } from "./blockpos";
+import { BlockPos, Vec3 } from "./blockpos";
 import type { CommandPermissionLevel } from "./command";
 import { Certificate } from "./connreq";
 import { HashedString } from "./hashedstring";
 import { ArmorSlot, ContainerId, Item, ItemStack, PlayerInventory, PlayerUIContainer, PlayerUISlot } from "./inventory";
-import type { NetworkIdentifier } from "./networkidentifier";
+import type { NetworkIdentifier, ServerNetworkHandler } from "./networkidentifier";
 import type { Packet } from "./packet";
-import { BossEventPacket, PlayerListEntry as _PlayerListEntry, PlaySoundPacket, ScorePacketInfo, SetDisplayObjectivePacket, SetScorePacket, SetTitlePacket, TextPacket, TransferPacket } from "./packets";
+import { BossEventPacket, PlayerListEntry as _PlayerListEntry, PlaySoundPacket, ScorePacketInfo, SetDisplayObjectivePacket, SetScorePacket, SetTitlePacket, TextPacket, ToastRequestPacket, TransferPacket } from "./packets";
 import { DisplaySlot } from "./scoreboard";
 import { SerializedSkin } from "./skin";
 
 export class Player extends Mob {
-    abilities: Abilities;
+    abilities: LayeredAbilities;
     playerUIContainer: PlayerUIContainer;
+
     /** @deprecated Use `this.getSpawnDimension()` instead */
     get respawnDimension(): DimensionId {
         return this.getSpawnDimension();
@@ -28,18 +33,6 @@ export class Player extends Mob {
     deviceId: string;
 
     protected _setName(name: string): void {
-        abstract();
-    }
-
-    /**
-     * Teleports the player to another dimension
-     *
-     * @param dimensionId - The dimension ID
-     * @param respawn - Indicates whether the dimension change is based on a respawn (player died in dimension)
-     *
-     * @see DimensionId
-     */
-    changeDimension(dimensionId: DimensionId, respawn: boolean): void {
         abstract();
     }
 
@@ -56,22 +49,6 @@ export class Player extends Mob {
      * Updates the player list to all players
      */
     updatePlayerList(): void {
-        abstract();
-    }
-
-    /**
-     * Teleports the player to a specified position
-     * @remarks This function is used when entities teleport players (e.g: ender pearls). Use Actor.teleport() if you want to teleport the player.
-     *
-     * @param position - Position to teleport the player to
-     * @param shouldStopRiding - Defines whether the player should stop riding an entity when teleported
-     * @param cause - Cause of teleportation
-     * @param sourceEntityType - Entity type that caused the teleportation
-     * @param sourceActorId - ActorUniqueID of the source entity
-     *
-     * @privateRemarks causes of teleportation are currently unknown.
-     */
-    teleportTo(position: Vec3, shouldStopRiding: boolean, cause: number, sourceEntityType: number, sourceActorId: ActorUniqueID): void {
         abstract();
     }
 
@@ -236,7 +213,7 @@ export class Player extends Mob {
     }
 
     /**
-     * Returns the multiplier for the player block destroy time, with every factor accounnted, except for if the tool is correct, the faster the higher
+     * Returns the multiplier for the player block destroy time, with every factor accounted, except for if the tool is correct, the faster the higher
      */
     getDestroySpeed(block: Block): number {
         abstract();
@@ -394,6 +371,12 @@ export class Player extends Mob {
     getXuid(): string {
         abstract();
     }
+    /**
+     * Returns the player's UUID
+     */
+    getUuid(): mce.UUID {
+        abstract();
+    }
     forceAllowEating(): boolean {
         abstract();
     }
@@ -437,6 +420,55 @@ export class Player extends Mob {
     isPlayerInitialized(): boolean {
         abstract();
     }
+
+    /**
+     * Get block destroy progress
+     * @param block
+     */
+    getDestroyProgress(block: Block): number{
+        abstract();
+    }
+
+    /**
+     * Respawn player
+     */
+    respawn(): void{
+        abstract();
+    }
+
+    /**
+     * Returns whether the player is simulated
+     */
+    isSimulated(): this is SimulatedPlayer{
+        abstract();
+    }
+
+    /**
+     * Set player's respawn ready
+     * @param vec3
+     */
+    setRespawnReady(vec3: Vec3): void{
+        abstract();
+    }
+
+    /**
+     * Set player's spawn block respawn position
+     * @param blockPos
+     * @param dimensionId
+     */
+    setSpawnBlockRespawnPosition(blockPos: BlockPos, dimensionId: DimensionId): void{
+        abstract();
+    }
+
+    setSelectedSlot(slot: number): ItemStack {
+        abstract();
+    }
+    /**
+     * @deprecated typo. Please use setSelectedSlot instead.
+     * */
+    setSelecetdSlot(slot: number): ItemStack {
+        return this.setSelectedSlot(slot);
+    }
 }
 
 namespace RawTextObject {
@@ -460,7 +492,11 @@ interface RawTextObject {
     rawtext: RawTextObject.Properties[];
 }
 
-export class ServerPlayer extends Player {
+export class ServerPlayer extends Player implements HasStorage {
+    static readonly [Storage.classId] = 'player';
+    [Storage.id]():string { return mce.UUID.toString(this.getUuid()); }
+    [Storage.aliasId]():string { return '_'+this.getName(); }
+
     /** @deprecated Use `this.getNetworkIdentifier()` instead */
     get networkIdentifier(): NetworkIdentifier {
         return this.getNetworkIdentifier();
@@ -648,6 +684,14 @@ export class ServerPlayer extends Player {
         pk.message = message;
         pk.params.push(...params);
         pk.needsTranslation = true;
+        this.sendNetworkPacket(pk);
+        pk.dispose();
+    }
+
+    sendToastRequest(title: string, body: string = ""): void {
+        const pk = ToastRequestPacket.allocate();
+        pk.title = title;
+        pk.body = body;
         this.sendNetworkPacket(pk);
         pk.dispose();
     }
@@ -871,6 +915,97 @@ export class ServerPlayer extends Player {
     die(damageSource: ActorDamageSource): void {
         this.setAttribute(AttributeId.Health, 0);
         return super.die(damageSource);
+    }
+}
+
+export class SimulatedPlayer extends ServerPlayer{
+    /**
+     * Create SimulatedPlayer
+     * @param name
+     * @param blockPos
+     * @param dimensionId
+     */
+    static create(name: string, blockPos: BlockPos|Vec3|{x:number, y:number, z:number}, dimensionId: DimensionId): SimulatedPlayer;
+
+    /**
+     * Create SimulatedPlayer
+     * @param name
+     * @param blockPos
+     * @param dimensionId
+     * @param nonOwnerPointerServerNetworkHandler Minecraft.getNonOwnerPointerServerNetworkHandler()
+     * @deprecated no need to pass serverNetworkHandler
+     */
+    static create(name: string, blockPos: BlockPos, dimensionId: DimensionId, nonOwnerPointerServerNetworkHandler: Bedrock.NonOwnerPointer<ServerNetworkHandler>): SimulatedPlayer;
+
+    static create(name: string, blockPos: BlockPos|Vec3|{x:number, y:number, z:number}, dimensionId: DimensionId, nonOwnerPointerServerNetworkHandler?: Bedrock.NonOwnerPointer<ServerNetworkHandler>): SimulatedPlayer{
+        abstract();
+    }
+
+    /**
+     * Simulate disconnect
+     */
+    simulateDisconnect(): void{
+        abstract();
+    }
+    simulateLookAt(target: Actor): void;
+    simulateLookAt(target: Vec3): void;
+    simulateLookAt(target: BlockPos): void;
+    simulateLookAt(target:BlockPos|Actor|Vec3):void{
+        abstract();
+    }
+    simulateJump():void{
+        abstract();
+    }
+    simulateSetBodyRotation(rotation:number):void{
+        abstract();
+    }
+    simulateSetItem(item:ItemStack,selectSlot:boolean,slot:number):boolean{
+        abstract();
+    }
+    simulateDestroyBlock(pos:BlockPos,direction:number=1):boolean{
+        abstract();
+    }
+    simulateStopDestroyingBlock():void{
+        abstract();
+    }
+    simulateLocalMove(pos:Vec3,speed:number):void{
+        abstract();
+    }
+    simulateMoveToLocation(pos:Vec3,speed:number):void{
+        abstract();
+    }
+    /* move to target with navigation
+    TODO: Implement `ScriptNavigationResult`
+    /* simulateNavigateTo(goal:Actor|Vec3, speed:number):void{
+        abstract();
+    } */
+    simulateNavigateToLocations(locations: Vec3[], speed: float32_t): void {
+        abstract();
+    }
+    simulateStopMoving():void{
+        abstract();
+    }
+    /** It attacks regardless of reach */
+    simulateAttack(target:Actor):boolean{
+        abstract();
+    }
+    simulateInteractWithActor(target:Actor):boolean{
+        abstract();
+    }
+    simulateInteractWithBlock(blockPos:BlockPos,direction:number=1):boolean{
+        abstract();
+    }
+    simulateUseItem(item:ItemStack):boolean{
+        abstract();
+    }
+    simulateUseItemOnBlock(item:ItemStack,pos:BlockPos,direction:number=1,clickPos:Vec3 = Vec3.create(0,0,0)):boolean{
+        abstract();
+    }
+    simulateUseItemInSlot(slot:number):boolean{
+        abstract();
+    }
+    simulateUseItemInSlotOnBlock(slot:number,pos:BlockPos,direction:number=1,clickPos:Vec3 = Vec3.create(0,0,0)):boolean{
+        abstract();
     }
 }
 

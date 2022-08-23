@@ -2,15 +2,15 @@ import { abstract } from "../common";
 import { VoidPointer } from "../core";
 import type { CxxVector } from "../cxxvector";
 import { nativeClass, NativeClass, nativeField } from "../nativeclass";
-import { bool_t, CxxString, CxxStringWith8Bytes, int32_t, uint16_t } from "../nativetype";
-import type { Actor, DimensionId } from "./actor";
+import { bool_t, CxxString, CxxStringWith8Bytes, int32_t, uint16_t, uint8_t } from "../nativetype";
+import type { Actor, DimensionId, ItemActor } from "./actor";
 import type { ChunkPos } from "./blockpos";
 import { BlockPos } from "./blockpos";
 import type { ChunkSource, LevelChunk } from "./chunk";
 import type { CommandName } from "./commandname";
 import type { Dimension } from "./dimension";
 import { HashedString } from "./hashedstring";
-import type { Container } from "./inventory";
+import type { Container, ItemStack } from "./inventory";
 import { CompoundTag, NBT } from "./nbt";
 import type { BlockActorDataPacket } from "./packets";
 import type { Player, ServerPlayer } from "./player";
@@ -84,6 +84,12 @@ export class BlockLegacy extends NativeClass {
     tryGetStateFromLegacyData(data:uint16_t):Block {
         abstract();
     }
+    getSilkTouchedItemInstance(block: Block): ItemStack{
+        abstract();
+    }
+    getDestroySpeed(): number{
+        abstract();
+    }
 }
 
 @nativeClass(null)
@@ -139,6 +145,54 @@ export class Block extends NativeClass {
         abstract();
     }
     use(subject: Player, blockPos: BlockPos, face: number): bool_t {
+        abstract();
+    }
+    getVariant(): number{
+        abstract();
+    }
+    getSerializationId(): CompoundTag{
+        abstract();
+    }
+    getSilkTouchItemInstance(): ItemStack{
+        abstract();
+    }
+    isUnbreakable(): boolean{
+        abstract();
+    }
+    buildDescriptionId(): string{
+        abstract();
+    }
+    isCropBlock(): boolean{
+        abstract();
+    }
+    popResource(blockSource: BlockSource, blockPos: BlockPos, itemStack: ItemStack): ItemActor{
+        abstract();
+    }
+    canHurtAndBreakItem(): boolean{
+        abstract();
+    }
+    getThickness(): number{
+        abstract();
+    }
+    hasComparatorSignal(): boolean{
+        abstract();
+    }
+    getTranslucency(): number{
+        abstract();
+    }
+    getExplosionResistance(actor: Actor|null = null): number{
+        abstract();
+    }
+    getComparatorSignal(blockSource: BlockSource, blockPos: BlockPos, facing: uint8_t): number{
+        abstract();
+    }
+    getDirectSignal(blockSource: BlockSource, blockPos: BlockPos, facing: int32_t): number{
+        abstract();
+    }
+    isSignalSource(): boolean{
+        abstract();
+    }
+    getDestroySpeed(): number{
         abstract();
     }
 }
@@ -202,6 +256,9 @@ export class BlockSource extends NativeClass {
         abstract();
     }
     removeBlockEntity(blockPos:BlockPos):void {
+        abstract();
+    }
+    getBrightness(blockPos: BlockPos): number{
         abstract();
     }
 }
@@ -280,6 +337,9 @@ export class BlockActor extends NativeClass {
      * @param player - The player to update the block for.
      */
     updateClientSide(player: ServerPlayer): void {
+        abstract();
+    }
+    getCustomName(): string{
         abstract();
     }
 }
@@ -365,6 +425,45 @@ export class ChestBlockActor extends BlockActor {
      * @remarks If the chest is not a double chest, BlockPos ZERO (0,0,0) is returned.
      */
     getPairedChestPosition(): BlockPos {
+        abstract();
+    }
+}
+
+@nativeClass(null)
+export class BlockUtils extends NativeClass{
+    static isDownwardFlowingLiquid(block: Block): boolean{
+        abstract();
+    }
+
+    static isBeehiveBlock(block: BlockLegacy): boolean{
+        abstract();
+    }
+
+    static isWaterSource(block: Block): boolean{
+        abstract();
+    }
+
+    static isFullFlowingLiquid(block: Block): boolean{
+        abstract();
+    }
+
+    static allowsNetherVegetation(block: BlockLegacy): boolean{
+        abstract();
+    }
+
+    static isThinFenceOrWallBlock(block: Block): boolean{
+        abstract();
+    }
+
+    static isLiquidSource(block: Block): boolean{
+        abstract();
+    }
+
+    static getLiquidBlockHeight(block: Block, blockPos: BlockPos): number{
+        abstract();
+    }
+
+    static canGrowTreeWithBeehive(block: Block): boolean{
         abstract();
     }
 }

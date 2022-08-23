@@ -3,7 +3,7 @@ import { abstract } from "../common";
 import { CxxVector } from "../cxxvector";
 import { makefunc } from "../makefunc";
 import { mce } from "../mce";
-import { nativeClass, NativeClass, nativeField } from "../nativeclass";
+import { AbstractClass, nativeClass, NativeClass, nativeField } from "../nativeclass";
 import { bool_t, CxxString, int32_t, NativeType, uint8_t, void_t } from "../nativetype";
 import { proc } from "./symbols";
 
@@ -18,7 +18,7 @@ export enum JsonValueType {
     Object = 7,
 }
 
-@nativeClass({size: 0x10, symbol: 'VValue@Json@@'})
+@nativeClass({size: 0x10, align: 0x8, symbol: 'VValue@Json@@'})
 export class JsonValue extends NativeClass {
     static readonly [CommandParameterType.symbol]:true;
 
@@ -234,7 +234,7 @@ JsonValue.prototype.size = makefunc.js(proc['?size@Value@Json@@QEBAIXZ'], int32_
 JsonValue.prototype[NativeType.dtor] = makefunc.js(proc['??1Value@Json@@QEAA@XZ'], void_t, {this:JsonValue});
 
 @nativeClass(null)
-export class Certificate extends NativeClass {
+export class Certificate extends AbstractClass {
     @nativeField(JsonValue, 0x50)
     json:JsonValue;
 
@@ -259,11 +259,20 @@ export class Certificate extends NativeClass {
 }
 
 @nativeClass(null)
-export class ConnectionRequest extends NativeClass {
-    @nativeField(Certificate.ref(), 0x08)
-    cert:Certificate;
+export class ConnectionRequest extends AbstractClass {
+    /** @deprecated use getCertificate() */
+    get cert():Certificate {
+        return this.getCertificate();
+    }
     @nativeField(Certificate.ref(), 0x10)
     something:Certificate;
+
+    /**
+     * it's possible to return null if before packet processing
+     */
+    getCertificate():Certificate {
+        abstract();
+    }
 
     getJson():JsonValue|null {
         const ptr = this.something;

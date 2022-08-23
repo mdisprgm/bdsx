@@ -17,9 +17,16 @@ import type { ServerPlayer } from "./player";
 import { RakNet } from "./raknet";
 import { RakNetInstance } from "./raknetinstance";
 
+enum SubClientId {
+    // TODO: fill
+}
+
 export class NetworkHandler extends AbstractClass {
     vftable:VoidPointer;
     instance:RakNetInstance;
+
+    send(ni:NetworkIdentifier, packet:Packet, senderSubClientId:number):void;
+    send(ni:NetworkIdentifier, packet:Packet, senderSubClientId:SubClientId):void;
 
     send(ni:NetworkIdentifier, packet:Packet, senderSubClientId:number):void {
         abstract();
@@ -53,11 +60,8 @@ export class ServerNetworkHandler extends AbstractClass {
     @nativeField(int32_t, 0x2f0) // accessed in ServerNetworkHandler:setMaxNumPlayers
     readonly maxPlayers: int32_t;
 
-    protected _disconnectClient(client:NetworkIdentifier, unknown:number, message:CxxString, skipMessage:boolean):void {
-        abstract();
-    }
     disconnectClient(client:NetworkIdentifier, message:string="disconnectionScreen.disconnected", skipMessage:boolean=false):void {
-        this._disconnectClient(client, 0, message, skipMessage);
+        abstract();
     }
     /**
      * @alias allowIncomingConnections
@@ -83,6 +87,9 @@ export class ServerNetworkHandler extends AbstractClass {
     /**
      * it's the same with `client.getActor()`
      */
+    _getServerPlayer(client:NetworkIdentifier, clientSubId:number):ServerPlayer|null;
+    _getServerPlayer(client:NetworkIdentifier, clientSubId:SubClientId):ServerPlayer|null;
+
     _getServerPlayer(client:NetworkIdentifier, clientSubId:number):ServerPlayer|null {
         abstract();
     }
@@ -103,9 +110,11 @@ export class NetworkIdentifier extends NativeStruct implements Hashable {
     unknown:bin64_t;
     @nativeField(RakNet.AddressOrGUID)
     address:RakNet.AddressOrGUID;
+    @nativeField(int32_t, {ghost:true, offset:0x98})
+    type:int32_t;
 
     assignTo(target:VoidPointer):void {
-        dll.vcruntime140.memcpy(target, this, NetworkHandler[NativeClass.contentSize]);
+        dll.vcruntime140.memcpy(target, this, networkIdentifierSize);
     }
 
     equals(other:NetworkIdentifier):boolean {
@@ -135,6 +144,7 @@ export class NetworkIdentifier extends NativeStruct implements Hashable {
         return identifiers.values();
     }
 }
+const networkIdentifierSize = NetworkIdentifier[NativeClass.contentSize];
 NetworkIdentifier.setResolver(ptr=>{
     if (ptr === null) return null;
     let ni = identifiers.get(ptr.as(NetworkIdentifier));

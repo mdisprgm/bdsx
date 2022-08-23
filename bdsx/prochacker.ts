@@ -1,6 +1,7 @@
 import * as colors from 'colors';
 import { asm, FloatRegister, Register, X64Assembler } from "./assembler";
 import { proc } from "./bds/symbols";
+import { CANCEL } from './common';
 import { NativePointer, StaticPointer, VoidPointer } from "./core";
 import { disasm } from "./disassembler";
 import { dll } from "./dll";
@@ -109,6 +110,24 @@ class AsmMover extends X64Assembler {
         }
     }
 
+    static checkSpace(codes:asm.Operations, key:keyof any, required:number):void {
+        let ended = false;
+        let inpos = 0;
+        for (const oper of codes.operations) {
+            const basename = oper.splits[0];
+            if (ended) {
+                if (oper.code === asm.code.nop || oper.code === asm.code.int3) {
+                    continue;
+                }
+                throw Error(`Failed to hook ${String(key)}, Too small area to patch, require=${required}, actual=${inpos}`);
+            }
+            if (basename === 'ret' || basename === 'jmp' || basename === 'call') {
+                ended = true;
+            }
+            inpos += oper.size;
+        }
+    }
+
     end():void {
         const tmpreg = this.getUnusing();
         const originend = this.origin.add(this.codesize);
@@ -137,6 +156,17 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
     constructor(public readonly map:T) {
     }
 
+    private _get(subject:string, key:Extract<keyof T, string>, offset:number):NativePointer|null {
+        try {
+            const ptr = this.map[key];
+            if (ptr == null) throw CANCEL;
+            return ptr.add(offset);
+        } catch (err) {
+            console.error(colors.red(`${subject}: skip, symbol "${key}" not found`));
+            return null;
+        }
+    }
+
     append<NT extends Record<string, NativePointer>>(nmap:NT):ProcHacker<T&NT> {
         const map = this.map as any;
         for (const [key, v] of Object.entries(nmap)) {
@@ -153,13 +183,13 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      * @param originalCode old codes
      * @param ignoreArea pairs of offset, ignores partial bytes.
      */
-    check(subject:string, key:keyof T, offset:number, ptr:StaticPointer, originalCode:number[], ignoreArea:number[]):boolean {
+    check(subject:string, key:Extract<keyof T, string>, offset:number, ptr:StaticPointer, originalCode:(number|null)[], ignoreArea?:number[]):boolean {
         const buffer = ptr.getBuffer(originalCode.length);
         const diff = memdiff(buffer, originalCode);
         if (!memdiff_contains(ignoreArea, diff)) {
-            console.error(colors.red(`${subject}: ${key}+0x${offset.toString(16)}: code does not match`));
+            console.error(colors.red(`${subject}: ${key} + 0x${offset.toString(16)}: code does not match`));
             console.error(colors.red(`[${hex(buffer)}] != [${hex(originalCode)}]`));
-            console.error(colors.red(`diff: ${JSON.stringify(diff)}`));
+            if (diff.length !== 0) console.error(colors.red(`diff: ${JSON.stringify(diff)}`));
             console.error(colors.red(`${subject}: skip`));
             return false;
         } else {
@@ -174,13 +204,9 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      * @param originalCode bytes comparing before hooking
      * @param ignoreArea pair offsets to ignore of originalCode
      */
-    nopping(subject:string, key:keyof T, offset:number, originalCode:number[], ignoreArea:number[]):void {
-        let ptr:StaticPointer = this.map[key];
-        if (!ptr) {
-            console.error(colors.red(`${subject}: skip, symbol "${key}" not found`));
-            return;
-        }
-        ptr = ptr.add(offset);
+    nopping(subject:string, key:Extract<keyof T, string>, offset:number, originalCode:number[], ignoreArea:number[]):void {
+        const ptr = this._get(subject, key, offset);
+        if (ptr === null) return;
         const size = originalCode.length;
         const unlock = new MemoryUnlocker(ptr, size);
         if (this.check(subject, key, offset, ptr, originalCode, ignoreArea)) {
@@ -193,9 +219,9 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      * @param key target symbol name
      * @param to call address
      */
-    hookingRaw(key:keyof T, to: VoidPointer|((original:VoidPointer)=>VoidPointer), opts?:disasm.Options|null):VoidPointer {
+    hookingRaw(key:Extract<keyof T, string>, to: VoidPointer|((original:VoidPointer)=>VoidPointer), opts?:disasm.Options|null):VoidPointer {
         const origin = this.map[key];
-        if (!origin) throw Error(`Symbol ${String(key)} not found`);
+        if (origin == null) throw Error(`Symbol ${String(key)} not found`);
 
         const REQUIRE_SIZE = 12;
         const codes = disasm.process(origin, REQUIRE_SIZE, opts);
@@ -217,8 +243,29 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
 
     /**
      * @param key target symbol name
+     * @param to call address
      */
-    hookingRawWithOriginal(key:keyof T, opts?:disasm.Options|null): (callback: (asm: X64Assembler, original: VoidPointer) => void) => VoidPointer {
+    hookingRawWithoutOriginal(key:Extract<keyof T, string>, to: VoidPointer, opts?:disasm.Options|null):void {
+        const origin = this.map[key];
+        if (origin == null) throw Error(`Symbol ${String(key)} not found`);
+
+        const REQUIRE_SIZE = 12;
+        const codes = disasm.process(origin, REQUIRE_SIZE, opts);
+        if (codes.size === 0) throw Error(`Failed to disassemble`);
+        AsmMover.checkSpace(codes, key, REQUIRE_SIZE);
+
+        const unlock = new MemoryUnlocker(origin, codes.size);
+        try {
+            hacktool.jump(origin, to, Register.rax, codes.size);
+        } finally {
+            unlock.done();
+        }
+    }
+
+    /**
+     * @param key target symbol name
+     */
+    hookingRawWithOriginal(key:Extract<keyof T, string>, opts?:disasm.Options|null): (callback: (asm: X64Assembler, original: VoidPointer) => void) => VoidPointer {
         return callback => this.hookingRaw(key, original=>{
             const data = asm();
             callback(data, original);
@@ -230,7 +277,7 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      * @param key target symbol name
      * @param to call address
      */
-    hookingRawWithCallOriginal(key:keyof T, to: VoidPointer,
+    hookingRawWithCallOriginal(key:Extract<keyof T, string>, to: VoidPointer,
         keepRegister:Register[],
         keepFloatRegister:FloatRegister[],
         opts:disasm.Options={}):void {
@@ -256,7 +303,7 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      * @param to call address
      */
     hooking<OPTS extends (MakeFuncOptions<any>&disasm.Options)|null, RETURN extends ParamType, PARAMS extends ParamType[]>(
-        key:keyof T,
+        key:Extract<keyof T, string>,
         returnType:RETURN,
         opts?: OPTS,
         ...params: PARAMS):
@@ -286,13 +333,9 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      * @param originalCode bytes comparing before hooking
      * @param ignoreArea pair offsets to ignore of originalCode
      */
-    patching(subject:string, key:keyof T, offset:number, newCode:VoidPointer, tempRegister:Register, call:boolean, originalCode:number[], ignoreArea:number[]):void {
-        let ptr:NativePointer = this.map[key];
-        if (ptr == null) {
-            console.error(colors.red(`${subject}: skip, symbol "${key}" not found`));
-            return;
-        }
-        ptr = ptr.add(offset);
+    patching(subject:string, key:Extract<keyof T, string>, offset:number, newCode:VoidPointer, tempRegister:Register, call:boolean, originalCode:(number|null)[], ignoreArea?:number[]):void {
+        const ptr = this._get(subject, key, offset);
+        if (ptr === null) return;
         if (!ptr) {
             console.error(colors.red(`${subject}: skip`));
             return;
@@ -314,13 +357,9 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      * @param originalCode bytes comparing before hooking
      * @param ignoreArea pair offsets to ignore of originalCode
      */
-    jumping(subject:string, key:keyof T, offset:number, jumpTo:VoidPointer, tempRegister:Register, originalCode:number[], ignoreArea:number[]):void {
-        let ptr:NativePointer = this.map[key];
-        if (ptr == null) {
-            console.error(colors.red(`${subject}: skip, symbol "${key}" not found`));
-            return;
-        }
-        ptr = ptr.add(offset);
+    jumping(subject:string, key:Extract<keyof T, string>, offset:number, jumpTo:VoidPointer, tempRegister:Register, originalCode:number[], ignoreArea:number[]):void {
+        const ptr = this._get(subject, key, offset);
+        if (ptr === null) return;
         const size = originalCode.length;
         const unlock = new MemoryUnlocker(ptr, size);
         if (this.check(subject, key, offset, ptr, originalCode, ignoreArea)) {
@@ -329,14 +368,15 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
         unlock.done();
     }
 
-    write(key:keyof T, offset:number, asm:X64Assembler|Uint8Array, subject?:string, originalCode?:number[], ignoreArea?:number[]):void {
+    write(key:Extract<keyof T, string>, offset:number, asm:X64Assembler|Uint8Array, subject?:string, originalCode?:number[], ignoreArea?:number[]):void {
+        if (subject == null) subject = key+'';
+        const ptr = this._get(subject, key, offset);
+        if (ptr === null) return;
         const buffer = asm instanceof Uint8Array ? asm : asm.buffer();
-        const ptr = this.map[key].add(offset);
         const unlock = new MemoryUnlocker(ptr, buffer.length);
         if (originalCode) {
-            if (subject == null) subject = key+'';
             if (originalCode.length < buffer.length) {
-                console.error(colors.red(`${subject}: ${key}+0x${offset.toString(16)}: writing space is too small`));
+                console.error(colors.red(`${subject}: ${key} +0x${offset.toString(16)}: writing space is too small`));
                 unlock.done();
                 return;
             }
@@ -352,7 +392,7 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
         unlock.done();
     }
 
-    saveAndWrite(key:keyof T, offset:number, asm:X64Assembler|Uint8Array):SavedCode {
+    saveAndWrite(key:Extract<keyof T, string>, offset:number, asm:X64Assembler|Uint8Array):SavedCode {
         const buffer = asm instanceof Uint8Array ? asm : asm.buffer();
         const ptr = this.map[key].add(offset);
         const code = new SavedCode(buffer, ptr);
@@ -370,7 +410,7 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      * @param params *_t or *Pointer
      */
     js<OPTS extends MakeFuncOptions<any>|null, RETURN extends ParamType, PARAMS extends ParamType[]>(
-        key: keyof T,
+        key:Extract<keyof T, string>,
         returnType:RETURN,
         opts?: OPTS,
         ...params: PARAMS):
@@ -390,8 +430,8 @@ export class ProcHacker<T extends Record<string, NativePointer>> {
      */
     jsv<OPTS extends MakeFuncOptions<any>|null, RETURN extends ParamType, PARAMS extends ParamType[]>(
         this:ProcHacker<typeof proc>,
-        vftable: keyof T,
-        key: keyof T,
+        vftable:Extract<keyof T, string>,
+        key:Extract<keyof T, string>,
         returnType:RETURN,
         opts?: OPTS,
         ...params: PARAMS):

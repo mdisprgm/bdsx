@@ -3,19 +3,21 @@
  */
 
 import { asm, FloatRegister, OperationSize, Register } from "bdsx/assembler";
+import { AbilitiesIndex } from "bdsx/bds/abilities";
 import { Actor, ActorType, DimensionId, ItemActor } from "bdsx/bds/actor";
 import { AttributeId } from "bdsx/bds/attribute";
 import { Block } from "bdsx/bds/block";
 import { BlockPos, RelativeFloat } from "bdsx/bds/blockpos";
 import { CommandContext, CommandPermissionLevel } from "bdsx/bds/command";
 import { JsonValue } from "bdsx/bds/connreq";
+import { CxxOptionalToUndefUnion } from "bdsx/bds/cxxoptional";
 import { HashedString } from "bdsx/bds/hashedstring";
-import { ItemStack } from "bdsx/bds/inventory";
+import { ItemStack, NetworkItemStackDescriptor } from "bdsx/bds/inventory";
 import { ByteArrayTag, ByteTag, CompoundTag, DoubleTag, EndTag, FloatTag, Int64Tag, IntArrayTag, IntTag, ListTag, NBT, ShortTag, StringTag, Tag } from "bdsx/bds/nbt";
 import { NetworkIdentifier } from "bdsx/bds/networkidentifier";
 import { MinecraftPacketIds } from "bdsx/bds/packetids";
-import { AttributeData, PacketIdToType } from "bdsx/bds/packets";
-import { Player, PlayerPermission } from "bdsx/bds/player";
+import { AttributeData, ModalFormResponsePacket, PacketIdToType } from "bdsx/bds/packets";
+import { Player, PlayerPermission, SimulatedPlayer } from "bdsx/bds/player";
 import { proc } from "bdsx/bds/symbols";
 import { bin } from "bdsx/bin";
 import { capi } from "bdsx/capi";
@@ -34,16 +36,19 @@ import { bedrockServer } from "bdsx/launcher";
 import { makefunc } from "bdsx/makefunc";
 import { mce } from "bdsx/mce";
 import { AbstractClass, nativeClass, NativeClass, nativeField } from "bdsx/nativeclass";
-import { bin64_t, bool_t, CxxString, float32_t, float64_t, int16_t, int32_t, uint16_t } from "bdsx/nativetype";
+import { bin64_t, bool_t, CxxString, float32_t, float64_t, int16_t, int32_t, int64_as_float_t, int8_t, uint16_t } from "bdsx/nativetype";
 import { CxxStringWrapper } from "bdsx/pointer";
 import { procHacker } from "bdsx/prochacker";
 import { PseudoRandom } from "bdsx/pseudorandom";
+import { jsdata } from "bdsx/storage/jsdata";
 import { Tester } from "bdsx/tester";
 import { arrayEquals, getEnumKeys, hex, stripSlashes } from "bdsx/util";
 import { getRecentSentPacketId } from "./net-rawpacket";
 
 let sendidcheck = 0;
 let chatCancelCounter = 0;
+
+const OverworldDimension$vftable = proc['??_7OverworldDimension@@6BIDimension@@@'];
 
 function checkCommandRegister(tester:Tester, testname:string, testcases:[CommandParameterType<any>|[CommandParameterType<any>, CommandFieldOptions|boolean], string|null, any][], throughConsole?:boolean):Promise<void> {
     const paramsobj:Record<string, CommandParameterType<any>|[CommandParameterType<any>, CommandFieldOptions|boolean]> = {};
@@ -318,6 +323,27 @@ Tester.concurrency({
 
     },
 
+    jsdata() {
+        const test=(value:unknown)=>{
+            const converted = jsdata.deserialize(jsdata.serialize(value));
+            this.deepEquals(converted, value, `${typeof value} jsdata mismatched`, v=>JSON.stringify(v));
+        }
+        test(1);
+        test(-1);
+        test(1234567890123);
+        test(-1234567890123);
+        test('2');
+        test('very very long text');
+        test(true);
+        test(false);
+        test(null);
+        test(undefined);
+        test([1,'2']);
+        test({a:1, b:'2'});
+        test(new Date);
+        test([1,['2',3],{a:4,b:5}, true, false, null, undefined]);
+    },
+
     memset() {
         const dest = new Uint8Array(12);
         const ptr = new NativePointer;
@@ -357,9 +383,15 @@ Tester.concurrency({
         const doubleToFloat = asm().cvtsd2ss_f_f(FloatRegister.xmm0, FloatRegister.xmm0).make(float32_t, {name: 'test, doubleToFloat'}, float64_t);
         this.equals(doubleToFloat(123), 123, 'double to float');
         const getbool = asm().mov_r_c(Register.rax, 0x100).make(bool_t, {name: 'test, return 100'});
+        const sum = makefunc.js(makefunc.np((a,b,c,d)=>a+b+c+d, int32_t, null, int8_t, int16_t, int32_t, int64_as_float_t), int32_t, null, int8_t, int16_t, int32_t, int64_as_float_t);
+        this.equals(sum(1,2,3,4), 10, '4 parameters');
         this.equals(getbool(), false, 'bool return');
         const bool2int = asm().mov_r_r(Register.rax, Register.rcx).make(int32_t, {name: 'test, return param'}, bool_t);
         this.equals(bool2int(true), 1, 'bool to int');
+        this.equals(bool2int(false), 0, 'bool to int');
+        const int2bool = asm().mov_r_r(Register.rax, Register.rcx).make(bool_t, {name: 'test, return param'}, int32_t);
+        this.equals(int2bool(1), true, 'int to bool');
+        this.equals(int2bool(0), false, 'int to bool');
         const int2short_as_int = asm().movzx_r_r(Register.rax, Register.rcx, OperationSize.dword, OperationSize.word).make(int32_t, {name: 'test, int2short_as_int'}, int32_t);
         this.equals(int2short_as_int(-1), 0xffff, 'int to short old');
         const int2short = asm().movzx_r_r(Register.rax, Register.rcx, OperationSize.dword, OperationSize.word).make(int16_t, {name: 'test, int2short'}, int32_t);
@@ -374,6 +406,12 @@ Tester.concurrency({
         this.equals(string2string('test string over 15 bytes'), 'test string over 15 bytes', 'string to string');
         const nullreturn = asm().xor_r_r(Register.rax, Register.rax).make(NativePointer, {name: 'test, nullreturn'});
         this.equals(nullreturn(), null, 'nullreturn does not return null');
+
+        const returning = asm().mov_r_r(Register.rax, Register.rcx).make(int32_t, {name: 'test, returning'}, int32_t);
+        this.equals(returning(1), 1, 'makefunc.js, returning failed');
+        const returningNative = makefunc.np(returning, int32_t, {name: 'test, overTheFiveNative'}, int32_t);
+        const returningRewrap = makefunc.js(returningNative, int32_t, {name: 'test, overTheFiveRewrap'}, int32_t);
+        this.equals(returningRewrap(1), 1, 'makefunc.np, returning failed');
 
         const overTheFour = asm().mov_r_rp(Register.rax, Register.rsp, 1, 0x28).make(int32_t, {name: 'test, overTheFour'}, int32_t, int32_t, int32_t, int32_t, int32_t);
         this.equals(overTheFour(0, 0, 0, 0, 1234), 1234, 'makefunc.js, overTheFour failed');
@@ -498,6 +536,16 @@ Tester.concurrency({
         clsvector.destruct();
     },
 
+    optional() {
+        const optionalInt = CxxOptionalToUndefUnion.make(int32_t);
+        const optionalJs = asm().mov_r_rp(Register.rax, Register.rdx, 1, 0).mov_rp_r(Register.rcx, 1, 0, Register.rax).mov_r_r(Register.rax, Register.rcx).make(optionalInt, {structureReturn: true}, optionalInt);
+        const optionalNp = makefunc.js(makefunc.np(v=>v, optionalInt, {structureReturn:true}, optionalInt), optionalInt, {structureReturn:true}, optionalInt);
+        this.equals(optionalJs(32), 32, 'optionalJs fail');
+        this.equals(optionalJs(undefined), undefined, 'optionalJs fail');
+        this.equals(optionalNp(32), 32, 'optionalNp fail');
+        this.equals(optionalNp(undefined), undefined, 'optionalNp fail');
+    },
+
     map() {
         const map = CxxMap.make(CxxString, int32_t).construct();
         map.set('a', 4);
@@ -536,7 +584,7 @@ Tester.concurrency({
             if (cmd === '/__dummy_command') {
                 passed = origin === 'Server';
                 this.assert(ctx.origin.vftable.equalsptr(proc['??_7ServerCommandOrigin@@6B@']), 'invalid origin');
-                this.assert(ctx.origin.getDimension().vftable.equalsptr(proc['??_7OverworldDimension@@6BLevelListener@@@']), 'invalid dimension');
+                this.assert(ctx.origin.getDimension().vftable.equalsptr(OverworldDimension$vftable), 'invalid dimension');
                 const pos = ctx.origin.getWorldPosition();
                 this.assert(pos.x === 0 && pos.y === 0 && pos.z === 0, 'world pos is not zero');
                 const actor = ctx.origin.getEntity();
@@ -642,6 +690,7 @@ Tester.concurrency({
             ['UpdateSubChunkBlocks', 'UpdateSubChunkBlocksPacket'],
             ['ItemStackRequest', 'ItemStackRequestPacket'],
             ['ItemStackResponse', 'ItemStackResponsePacket'],
+            ['MapItemDataPacket', 'ClientboundMapItemData']
         ]);
 
         for (const id in PacketIdToType) {
@@ -676,6 +725,34 @@ Tester.concurrency({
             if (!/^\d+$/.test(id)) continue;
             const Packet = PacketIdToType[+id as keyof PacketIdToType];
             this.assert(!!Packet, `MinecraftPacketIds.${MinecraftPacketIds[id]}: class not found`);
+        }
+    },
+
+    classFields() {
+        {
+            const packet = ModalFormResponsePacket.allocate();
+            this.equals(packet.id, 0);
+            this.equals(packet.response.value(), undefined);
+            packet.id = 10;
+            packet.response.initValue();
+            packet.response.value()!.setValue('test');
+            packet.dispose();
+        }
+
+        {
+            const itemStack = ItemStack.constructWith('minecraft:dirt', 12, 1);
+            this.assert(itemStack.block.equalsptr(Block.create('minecraft:dirt', 1)), 'itemStack.block');
+            this.equals(itemStack.valid, true, 'itemStack.vaild');
+            this.equals(itemStack.showPickup, true, 'itemStack.showPickup');
+            this.equals(itemStack.canPlaceOn.size(), 0, 'itemStack.canPlaceOn');
+            this.equals(itemStack.canDestroy.size(), 0, 'itemStack.canDestroy');
+            this.equals(itemStack.amount, 12, 'itemStack.amount');
+
+            const itemDesc = NetworkItemStackDescriptor.constructWith(itemStack);
+            this.equals(itemDesc._unknown, '\0\0\0\0\0\0\0\0\0\0', 'itemDesc._unknown');
+            itemDesc._unknown = 'over 15 bytes string';
+            itemDesc.destruct();
+            itemStack.destruct();
         }
     },
 
@@ -735,9 +812,9 @@ Tester.concurrency({
             const connreq = ptr.connreq;
             this.assert(connreq !== null, 'no ConnectionRequest, client version mismatched?');
             if (connreq !== null) {
-                const cert = connreq.cert;
+                const cert = connreq.getCertificate();
                 let uuid = cert.json.value()["extraData"]["identity"];
-                this.equals(uuid, cert.getIdentityString(), 'getIdentityString() !== extraData.identity');
+                this.equals(cert.getIdentityString(), uuid, 'getIdentityString() !== extraData.identity');
             }
 
             setTimeout(() => {
@@ -775,18 +852,20 @@ Tester.concurrency({
                 }
 
                 if (actor !== null) {
-                    this.assert(actor.getDimension().vftable.equalsptr(proc['??_7OverworldDimension@@6BLevelListener@@@']),
+                    this.assert(actor.getDimension().vftable.equalsptr(OverworldDimension$vftable),
                         'getDimension() is not OverworldDimension');
                     this.equals(actor.getDimensionId(), DimensionId.Overworld, 'getDimensionId() is not overworld');
                     if (actor instanceof Player) {
-                        const cmdlevel = actor.abilities.getCommandPermissionLevel();
+                        const cmdlevel = actor.abilities.getCommandPermissions();
                         this.assert(CommandPermissionLevel.Normal <= cmdlevel && cmdlevel <= CommandPermissionLevel.Internal, 'invalid actor.abilities');
                         this.equals(actor.getCommandPermissionLevel(), cmdlevel, 'Invalid command permission level');
-                        const playerlevel = actor.abilities.getPlayerPermissionLevel();
+                        const playerlevel = actor.abilities.getPlayerPermissions();
                         this.assert(PlayerPermission.VISITOR <= playerlevel && playerlevel <= PlayerPermission.CUSTOM, 'invalid actor.abilities');
                         this.equals(actor.getPermissionLevel(), playerlevel, 'Invalid player permission level');
 
-                        this.equals(actor.getCertificate().getXuid(), connectedXuid, 'xuid mismatch');
+                        if (!(actor instanceof SimulatedPlayer)) {
+                            this.equals(actor.getCertificate().getXuid(), connectedXuid, 'xuid mismatch');
+                        }
 
                         const pos = actor.getSpawnPosition();
                         const dim = actor.getSpawnDimension();
@@ -814,20 +893,48 @@ Tester.concurrency({
                         // test for hasFamily
                         this.assert(actor.hasFamily("player") === true, "the actor must be a Player");
                         this.assert(actor.hasFamily("undead") === false, "the actor must be not a Undead Mob");
+                        const abilities = actor.abilities;
+                        const ROUND_UP_AXIS = 0x10000;
+                        const checkAbility = (index:AbilitiesIndex, expected:boolean|number):void=>{
+                            const abil = abilities.getAbility(index);
+                            let actual = abil.getValue();
+                            if (typeof actual === 'number') actual = Math.round(actual*ROUND_UP_AXIS)/ROUND_UP_AXIS;
+                            if (typeof expected === 'number') expected = Math.round(expected*ROUND_UP_AXIS)/ROUND_UP_AXIS;
+                            this.equals(actual, expected, `unexpected ${AbilitiesIndex[index]} value`, {stackOffset: 1});
+                        };
+                        checkAbility(AbilitiesIndex.Build, true);
+                        checkAbility(AbilitiesIndex.Mine, true);
+                        checkAbility(AbilitiesIndex.DoorsAndSwitches, true);
+                        checkAbility(AbilitiesIndex.OpenContainers, true);
+                        checkAbility(AbilitiesIndex.AttackMobs, true);
+                        // checkAbility(AbilitiesIndex.Invulnerable, false); // skip for creative
+                        // checkAbility(AbilitiesIndex.Flying, false); // skip for creative
+                        // checkAbility(AbilitiesIndex.MayFly, false); // skip for creative
+                        // checkAbility(AbilitiesIndex.Instabuild, false); // skip for creative
+                        checkAbility(AbilitiesIndex.Lightning, false);
+                        checkAbility(AbilitiesIndex.FlySpeed, 0.05);
+                        checkAbility(AbilitiesIndex.WalkSpeed, 0.1);
+                        checkAbility(AbilitiesIndex.Muted, false);
+                        checkAbility(AbilitiesIndex.WorldBuilder, false);
+                        checkAbility(AbilitiesIndex.NoClip, false);
                     }
 
                     if (identifier === 'minecraft:player') {
-                        this.assert(level.getPlayers()[0] === actor, 'the joined player is not a first player');
+                        const players = level.getPlayers();
+                        const last = players[players.length-1];
+                        this.assert(last === actor, 'the joined player is not a last player');
                         const name = actor.getName();
-                        this.equals(name, connectedId, 'id does not match');
+                        if (!(actor instanceof SimulatedPlayer)) {
+                            this.equals(name, connectedId, 'id does not match');
+                            this.equals(actor.getNetworkIdentifier(), connectedNi, 'the network identifier does not match');
+                            this.assert(actor === connectedNi.getActor(), 'ni.getActor() is not actor');
+                            actor.setName('test');
+                            this.equals(actor.getName(), 'test', 'name is not set');
+                            actor.setName(name);
+                        }
                         this.equals(actor.getEntityTypeId(), ActorType.Player, 'player type does not match');
                         this.assert(actor.isPlayer(), 'player is not the player');
-                        this.equals(actor.getNetworkIdentifier(), connectedNi, 'the network identifier does not match');
-                        this.assert(actor === connectedNi.getActor(), 'ni.getActor() is not actor');
                         this.assert(Actor.fromEntity(actor.getEntity()) === actor, 'actor.getEntity is not entity');
-
-                        actor.setName('test');
-                        this.equals(actor.getName(), 'test', 'name is not set');
                     } else {
                         this.assert(!actor.isPlayer(), `an entity that is not a player is a player (identifier:${identifier})`);
                     }
@@ -840,6 +947,9 @@ Tester.concurrency({
         events.playerJoin.on(this.wrap((ev) => {
             const player = ev.player;
             try {
+                const netId = player.getNetworkIdentifier();
+                this.equals(player.deviceId, bedrockServer.serverNetworkHandler.fetchConnectionRequest(netId).getDeviceId(), "player.deviceId is broken");
+
                 const region = player.getRegion();
                 const levelChunk = region.getChunkAt(BlockPos.create(player.getPosition()));
                 if (levelChunk) {
@@ -887,7 +997,7 @@ Tester.concurrency({
         });
     },
 
-    attributeNames():void {
+    attributeNames() {
         @nativeClass(null)
         class Attribute extends AbstractClass {
             @nativeField(int32_t)
@@ -1070,8 +1180,9 @@ events.packetRaw(MinecraftPacketIds.Login).on((ptr, size, ni) => {
     connectedNi = ni;
 });
 events.packetAfter(MinecraftPacketIds.Login).on(ptr => {
-    if (ptr.connreq === null) return;
-    const cert = ptr.connreq.cert;
+    const connreq = ptr.connreq;
+    if (connreq === null) return;
+    const cert = connreq.getCertificate();
     connectedId = cert.getId();
     connectedXuid = cert.getXuid();
 });
