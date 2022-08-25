@@ -1,3 +1,4 @@
+import { CommandPermissionLevel } from "bdsx/bds/command";
 import { command } from "bdsx/command";
 import { bedrockServer } from "bdsx/launcher";
 import { CxxString } from "bdsx/nativetype";
@@ -9,7 +10,7 @@ enum ModifyEv {
 }
 const EnumModifyEv = command.enum("server.modify", ModifyEv);
 
-const Server = command.register("server", "server manager");
+const Server = command.register("server", "server manager", CommandPermissionLevel.Operator);
 
 Server.overload(
     (p, o, op) => {
