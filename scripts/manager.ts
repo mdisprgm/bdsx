@@ -1,4 +1,5 @@
 import { CommandPermissionLevel } from "bdsx/bds/command";
+import { MinecraftPacketIds } from "bdsx/bds/packetids";
 import { command } from "bdsx/command";
 import { events } from "bdsx/event";
 import { bedrockServer } from "bdsx/launcher";
@@ -8,26 +9,39 @@ import { serverProperties } from "bdsx/serverproperties";
 enum ModifyEv {
     set = 1,
     reset = 2,
+    get = 3,
 }
 const EnumModifyEv = command.enum("server.modify", ModifyEv);
 
 export namespace Server {
-    let CurrentPlayers: number = 0;
-    let MaxPlayers: number = Number(serverProperties["max-players"]) || 1234;
+    let curr_players: number = 0;
+    let max_players: number = Number(serverProperties["max-players"]) || 1234;
     export function setMaxPlayers(value: number): void {
-        MaxPlayers = value;
+        max_players = value;
     }
     export function setCurrentPlayers(value: number): void {
-        CurrentPlayers = value;
+        curr_players = value;
+    }
+    export function setMotd(value: string): void {
+        bedrockServer.serverInstance.setMotd(value);
     }
     export function getMaxPlayers(): number {
-        return MaxPlayers;
+        return max_players;
     }
     export function getCurrentPlayers(): number {
-        return CurrentPlayers;
+        return curr_players;
+    }
+    export function getMotd(): string {
+        return bedrockServer.serverInstance.getMotd();
     }
     export const cmd = command.register("server", "server manager", CommandPermissionLevel.Operator, 1);
 }
+events.packetAfter(MinecraftPacketIds.Login).on((pkt, ni) => {
+    Server.setCurrentPlayers(Server.getCurrentPlayers() + 1);
+});
+events.networkDisconnected.on((ni) => {
+    Server.setCurrentPlayers(Server.getCurrentPlayers() - 1);
+});
 
 events.queryRegenerate.on((ev) => {
     ev.currentPlayers = Server.getCurrentPlayers();
@@ -42,13 +56,16 @@ Server.cmd.overload(
                     op.error("enter a value to set to motd");
                     return;
                 } else {
-                    bedrockServer.serverInstance.setMotd(p.value);
+                    Server.setMotd(p.value);
                     op.success("succeeded");
                 }
                 break;
             case ModifyEv.reset:
-                bedrockServer.serverInstance.setMotd(serverProperties["server-name"]!);
+                Server.setMotd(serverProperties["server-name"]!);
                 op.success("succeeded");
+                break;
+            case ModifyEv.get:
+                op.success("Motd: " + bedrockServer.serverInstance.getMotd());
                 break;
             default:
                 op.error("unknown action");
@@ -78,6 +95,9 @@ Server.cmd.overload(
                 Server.setCurrentPlayers(0);
                 op.success("succeeded");
                 break;
+            case ModifyEv.get:
+                op.success("Curr: " + Server.getCurrentPlayers().toString());
+                break;
             default:
                 op.error("unknown action");
                 break;
@@ -106,6 +126,9 @@ Server.cmd.overload(
                 Server.setMaxPlayers(0);
                 op.success("succeeded");
                 break;
+            case ModifyEv.get:
+                op.success("Max: " + Server.getMaxPlayers().toString());
+                break;
             default:
                 op.error("unknown action");
                 break;
@@ -115,5 +138,17 @@ Server.cmd.overload(
         event: EnumModifyEv,
         option: command.enum("server.action.max_players", "max_players"),
         value: [int32_t, true],
+    },
+);
+
+Server.cmd.overload(
+    (p, o, op) => {
+        op.success("Motd: " + Server.getMotd());
+        const curr = Server.getCurrentPlayers();
+        const max = Server.getMaxPlayers();
+        op.success(`Players: (${curr}/${max})`);
+    },
+    {
+        event: command.enum("server.status", "status"),
     },
 );
