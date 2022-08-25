@@ -18,12 +18,12 @@ enum State {
     Deleted,
 }
 
-export abstract class Storage {
+export abstract class Storage<DataType = any> {
     static readonly classId = Symbol('storageClassId');
     static readonly id = Symbol('storageId');
     static readonly aliasId = Symbol('storageId');
 
-    abstract get data():any;
+    abstract get data():DataType;
     abstract get isLoaded():boolean;
     abstract init(value:unknown):void;
     abstract close():boolean;
