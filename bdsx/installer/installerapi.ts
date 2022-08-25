@@ -9,15 +9,36 @@ import * as unzipper from 'unzipper';
 import * as child_process from 'child_process';
 import { fsutil } from '../fsutil';
 import { printOnProgress } from '../util';
-import * as BDS_VERSION from '../version-bds.json';
-import * as BDSX_CORE_VERSION from '../version-bdsx.json';
+import * as BDS_VERSION_DEFAULT from '../version-bds.json';
+import * as BDSX_CORE_VERSION_DEFAULT from '../version-bdsx.json';
 
 const BDSX_YES = process.env.BDSX_YES;
 const sep = path.sep;
 
-const BDS_LINK = `https://minecraft.azureedge.net/bin-win/bedrock-server-${BDS_VERSION}.zip`;
-const BDSX_CORE_LINK = `https://github.com/bdsx/bdsx-core/releases/download/${BDSX_CORE_VERSION}/bdsx-core-${BDSX_CORE_VERSION}.zip`;
-const PDBCACHE_LINK = `https://github.com/bdsx/pdbcache/releases/download/${BDS_VERSION}/pdbcache.zip`;
+const BDS_LINK_DEFAULT = 'https://minecraft.azureedge.net/bin-win/bedrock-server-%BDS_VERSION%.zip';
+const BDSX_CORE_LINK_DEFAULT = 'https://github.com/bdsx/bdsx-core/releases/download/%BDSX_CORE_VERSION%/bdsx-core-%BDSX_CORE_VERSION%.zip';
+const PDBCACHE_LINK_DEFAULT = 'https://github.com/bdsx/pdbcache/releases/download/%BDS_VERSION%/pdbcache.zip';
+
+const BDS_VERSION = process.env.BDSX_BDS_VERSION || BDS_VERSION_DEFAULT;
+const BDSX_CORE_VERSION = process.env.BDSX_CORE_VERSION || BDSX_CORE_VERSION_DEFAULT;
+const BDS_LINK = replaceVariable(process.env.BDSX_BDS_LINK || BDS_LINK_DEFAULT);
+const BDSX_CORE_LINK = replaceVariable(process.env.BDSX_CORE_LINK || BDSX_CORE_LINK_DEFAULT);
+const PDBCACHE_LINK = replaceVariable(process.env.BDSX_PDBCACHE_LINK || PDBCACHE_LINK_DEFAULT);
+
+function replaceVariable(str: string): string {
+    return str.replace(/%(.*?)%/g, (match, name: string) => {
+        switch (name.toUpperCase()) {
+        case '':
+            return '%';
+        case 'BDS_VERSION':
+            return BDS_VERSION;
+        case 'BDSX_CORE_VERSION':
+            return BDSX_CORE_VERSION;
+        default:
+            return match;
+        }
+    });
+}
 
 export async function installBDS(bdsPath:string, agreeOption:boolean = false):Promise<boolean> {
     if (BDSX_YES === 'skip') {
@@ -219,7 +240,7 @@ export async function installBDS(bdsPath:string, agreeOption:boolean = false):Pr
 
         private async _install():Promise<void> {
             const oldFiles = this.opts.oldFiles;
-            if (oldFiles) {
+            if (oldFiles != null) {
                 for (const oldfile of oldFiles) {
                     try {
                         await fsutil.del(path.join(this.opts.targetPath, oldfile));
@@ -227,6 +248,7 @@ export async function installBDS(bdsPath:string, agreeOption:boolean = false):Pr
                     }
                 }
             }
+            await fsutil.mkdir(this.opts.targetPath);
             const preinstall = this.opts.preinstall;
             if (preinstall) await preinstall();
             const writedFiles = await this._downloadAndUnzip();
@@ -238,37 +260,49 @@ export async function installBDS(bdsPath:string, agreeOption:boolean = false):Pr
             if (postinstall) await postinstall(writedFiles);
         }
 
+        private async _confirmAndInstall():Promise<void> {
+            const confirm = this.opts.confirm;
+            if (confirm != null) await confirm();
+            await this._install();
+            console.log(`${this.opts.name}: Installed successfully`);
+        }
+
         async install():Promise<void> {
-            await fsutil.mkdir(this.opts.targetPath);
             const name = this.opts.name;
             const key = this.opts.key;
             if (key == null || this.opts.version == null) {
                 await this._install();
                 return;
             }
+            const keyFile = this.opts.keyFile;
+            const keyExists = keyFile != null && await fsutil.exists(path.join(this.opts.targetPath, keyFile));
+            const keyNotFound = keyFile != null && !keyExists;
             const version = installInfo[key];
             if (version === undefined) {
-                const keyFile = this.opts.keyFile;
-                if (keyFile && await fsutil.exists(path.join(this.opts.targetPath, keyFile))) {
+                if (keyExists) {
                     if (await yesno(`${name}: Would you like to use what already installed?`)) {
                         installInfo[key] = 'manual' as any;
                         console.log(`${name}: manual`);
                         return;
                     }
                 }
-                const confirm = this.opts.confirm;
-                if (confirm) await confirm();
-                await this._install();
-                console.log(`${name}: Installed successfully`);
-            } else if (version === null || version === 'manual') {
-                console.log(`${name}: manual`);
-            } else if (version === this.opts.version) {
-                console.log(`${name}: ${this.opts.version}`);
+                this._confirmAndInstall();
             } else {
-                console.log(`${name}: Old (${version})`);
-                console.log(`${name}: New (${this.opts.version})`);
-                await this._install();
-                console.log(`${name}: Updated`);
+                if (keyNotFound) {
+                    console.log(colors.yellow(`${name}: ${keyFile} not found`));
+                    this._confirmAndInstall();
+                } else {
+                    if (version === null || version === 'manual') {
+                        console.log(`${name}: manual`);
+                    } else if (version === this.opts.version) {
+                        console.log(`${name}: ${this.opts.version}`);
+                    } else {
+                        console.log(`${name}: Old (${version})`);
+                        console.log(`${name}: New (${this.opts.version})`);
+                        await this._install();
+                        console.log(`${name}: Updated`);
+                    }
+                }
             }
         }
 
@@ -326,7 +360,7 @@ export async function installBDS(bdsPath:string, agreeOption:boolean = false):Pr
         url: BDSX_CORE_LINK,
         targetPath: bdsPath,
         key: 'bdsxCoreVersion',
-        keyFile: 'Chakra.dll',
+        keyFile: 'VCRUNTIME140_1.dll',
         oldFiles: ['mods', 'Chakra.pdb'],
     });
 
