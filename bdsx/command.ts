@@ -1,9 +1,11 @@
 
 import * as colors from 'colors';
-import { Command, CommandCheatFlag, CommandContext, CommandEnum, CommandIndexEnum, CommandMappedValue, CommandOutput, CommandParameterData, CommandParameterDataType, CommandParameterOption, CommandPermissionLevel, CommandRawEnum, CommandRegistry, CommandSoftEnum, CommandStringEnum, CommandUsageFlag, CommandVisibilityFlag, MCRESULT, MinecraftCommands } from './bds/command';
+import { Command, CommandCheatFlag, CommandContext, CommandOutput, CommandParameterData, CommandParameterDataType, CommandParameterOption, CommandPermissionLevel, CommandRegistry, CommandUsageFlag, CommandVisibilityFlag, MCRESULT, MinecraftCommands } from './bds/command';
 import { CommandOrigin } from './bds/commandorigin';
 import { capi } from './capi';
+import { CommandEnum, CommandIndexEnum, CommandRawEnum, CommandSoftEnum, CommandStringEnum } from './commandenum';
 import { CommandParameterType } from './commandparam';
+import { CommandMappedValue, commandParser } from './commandparser';
 import { emptyFunc } from './common';
 import { decay } from './decay';
 import { events } from './event';
@@ -82,9 +84,10 @@ export class CustomCommandFactory {
     overload<PARAMS extends Record<string, CommandParameterType<any>|[CommandParameterType<any>, CommandFieldOptions|boolean]>>(
         callback:(params:{
             [key in keyof PARAMS]:
-                PARAMS[key] extends [infer T, infer OPTS] ? OptionalCheck<T, OPTS> :
-                PARAMS[key] extends CommandParameterType<any> ? GetTypeFromParam<PARAMS[key]> :
-                never
+                PARAMS[key] extends [infer T, infer OPTS] ?
+                (OPTS extends CommandFieldOptions|boolean ? OptionalCheck<T, OPTS> : never) :
+                (PARAMS[key] extends CommandParameterType<any> ? GetTypeFromParam<PARAMS[key]> :
+                never)
             }, origin:CommandOrigin, output:CommandOutput)=>void,
         parameters:PARAMS):this {
 
@@ -144,7 +147,7 @@ export class CustomCommandFactory {
                 type = type[0];
             }
             if (key in fields) throw Error(`${key}: field name duplicated`);
-            if (!CommandRegistry.hasParser(type)) throw Error(`CommandFactory.overload does not support ${type.name}, Please check bdsx/bds/commandparsertypes.ts`);
+            if (!commandParser.has(type)) throw Error(`CommandFactory.overload does not support ${type.name}, Please check bdsx/bds/commandparsertypes.ts`);
             fields[key] = type;
 
             if (optional) {

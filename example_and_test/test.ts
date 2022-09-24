@@ -15,6 +15,7 @@ import { HashedString } from "bdsx/bds/hashedstring";
 import { ItemStack, NetworkItemStackDescriptor } from "bdsx/bds/inventory";
 import { ByteArrayTag, ByteTag, CompoundTag, DoubleTag, EndTag, FloatTag, Int64Tag, IntArrayTag, IntTag, ListTag, NBT, ShortTag, StringTag, Tag } from "bdsx/bds/nbt";
 import { NetworkIdentifier } from "bdsx/bds/networkidentifier";
+import { Packet } from "bdsx/bds/packet";
 import { MinecraftPacketIds } from "bdsx/bds/packetids";
 import { AttributeData, ModalFormResponsePacket, PacketIdToType } from "bdsx/bds/packets";
 import { Player, PlayerPermission, SimulatedPlayer } from "bdsx/bds/player";
@@ -50,7 +51,9 @@ let chatCancelCounter = 0;
 
 const OverworldDimension$vftable = proc['??_7OverworldDimension@@6BIDimension@@@'];
 
-function checkCommandRegister(tester:Tester, testname:string, testcases:[CommandParameterType<any>|[CommandParameterType<any>, CommandFieldOptions|boolean], string|null, any][], throughConsole?:boolean):Promise<void> {
+type PromiseFunc = ()=>Promise<PromiseFunc>;
+
+function checkCommandRegister(tester:Tester, testname:string, testcases:[CommandParameterType<any>|[CommandParameterType<any>, CommandFieldOptions|boolean], string|null, any][], opts:{throughConsole?:boolean,noRun?:boolean}={}):Promise<PromiseFunc> {
     const paramsobj:Record<string, CommandParameterType<any>|[CommandParameterType<any>, CommandFieldOptions|boolean]> = {};
     const n = testcases.length;
     for (let i=0;i<n;i++) {
@@ -80,34 +83,39 @@ function checkCommandRegister(tester:Tester, testname:string, testcases:[Command
         output.success('passed');
     }, paramsobj);
 
-    return new Promise<void>((resolve, reject) => {
-        const outputcb = (output:string) => {
-            if (output === 'passed') {
-                events.commandOutput.remove(outputcb);
-                resolve();
-                return CANCEL;
-            }
-            if (output === 'failed') {
-                events.commandOutput.remove(outputcb);
-                reject(Error(`${cmdname} failed`));
-                return CANCEL;
-            }
-        };
-        events.commandOutput.on(outputcb);
 
-        if (throughConsole) {
-            bedrockServer.executeCommandOnConsole(cmdline);
-        } else {
-            const res = bedrockServer.executeCommand(cmdline, CommandResultType.OutputAndData);
-            if (!res.isSuccess()) {
-                tester.error(`${cmdname} failed`, 5);
+    function run():Promise<PromiseFunc> {
+        return new Promise<PromiseFunc>((resolve, reject) => {
+            const outputcb = (output:string) => {
+                if (output === 'passed') {
+                    events.commandOutput.remove(outputcb);
+                    resolve(run);
+                    return CANCEL;
+                }
+                if (output === 'failed') {
+                    events.commandOutput.remove(outputcb);
+                    reject(Error(`${cmdname} failed`));
+                    return CANCEL;
+                }
+            };
+            events.commandOutput.on(outputcb);
+
+            if (opts.throughConsole) {
+                bedrockServer.executeCommandOnConsole(cmdline);
             } else {
-                tester.equals(res.data.statusMessage, 'passed', `${cmdname}, unexpected statusMessage`);
-                tester.equals(res.data.statusCode, res.getFullCode(), `${cmdname}, unexpected statusCode`);
+                const res = bedrockServer.executeCommand(cmdline, CommandResultType.OutputAndData);
+                if (!res.isSuccess()) {
+                    tester.error(`${cmdname} failed`, 5);
+                } else {
+                    tester.equals(res.data.statusMessage, 'passed', `${cmdname}, unexpected statusMessage`);
+                    tester.equals(res.data.statusCode, res.getFullCode(), `${cmdname}, unexpected statusCode`);
+                }
             }
-        }
-    });
-};
+        });
+    }
+    if (opts.noRun) return Promise.resolve(run);
+    return run();
+}
 
 @nativeClass()
 class VectorClass extends NativeClass {
@@ -152,16 +160,7 @@ Tester.concurrency({
             'serverInstance is not ServerInstance');
         const networkHandler = bedrockServer.networkHandler;
         this.assert(!!networkHandler && networkHandler.isNotNull(), 'networkHandler not found');
-        this.assert(networkHandler.vftable.equalsptr(proc['??_7NetworkHandler@@6BIGameConnectionInfoProvider@Social@@@']),
-            'networkHandler is not NetworkHandler');
-        this.assert(bedrockServer.minecraft.vftable.equalsptr(proc['??_7Minecraft@@6B@']), 'minecraft is not Minecraft');
         this.assert(bedrockServer.commandOutputSender.vftable.equalsptr(proc['??_7CommandOutputSender@@6B@']), 'sender is not CommandOutputSender');
-
-        this.assert(networkHandler.instance.vftable.equalsptr(proc["??_7RakNetInstance@@6BConnector@@@"]),
-            'networkHandler.instance is not RaknetInstance');
-
-        this.assert(networkHandler.instance.peer.vftable.equalsptr(proc["??_7RakPeer@RakNet@@6BRakPeerInterface@1@@"]),
-            'networkHandler.instance.peer is not RakNet::RakPeer');
 
         const shandle = bedrockServer.serverNetworkHandler;
         shandle.setMotd('TestMotd');
@@ -587,7 +586,9 @@ Tester.concurrency({
             if (cmd === '/__dummy_command') {
                 passed = origin === 'Server';
                 this.assert(ctx.origin.vftable.equalsptr(proc['??_7ServerCommandOrigin@@6B@']), 'invalid origin');
-                this.assert(ctx.origin.getDimension().vftable.equalsptr(OverworldDimension$vftable), 'invalid dimension');
+                const dimension = ctx.origin.getDimension();
+                this.assert(dimension.vftable.equalsptr(OverworldDimension$vftable), 'invalid dimension');
+                this.equals(dimension.getDefaultBiomeString(), 'ocean', 'invalid getDefaultBiomeString');
                 const pos = ctx.origin.getWorldPosition();
                 this.assert(pos.x === 0 && pos.y === 0 && pos.z === 0, 'world pos is not zero');
                 const actor = ctx.origin.getEntity();
@@ -619,7 +620,7 @@ Tester.concurrency({
 
     async commandregister() {
         // command register test, parameter test
-        await checkCommandRegister(this, 'cmdtest', [], true);
+        await checkCommandRegister(this, 'cmdtest', [], {throughConsole:true});
         await checkCommandRegister(this, 'cmdtest2', []);
         await checkCommandRegister(this, 'cmdtest3', [
             [CxxString, 'a', 'a'],
@@ -628,6 +629,16 @@ Tester.concurrency({
             [CxxString, 'a', 'a'],
             [[CxxString, true], null, undefined],
         ]);
+
+        const tests:PromiseFunc[] = [];
+        for (let i=0;i<100;i++) {
+            tests.push(await checkCommandRegister(this, 'repeat'+i, [
+                [CxxString, 'a', 'a'],
+            ], {noRun: true}));
+        }
+        for (const test of tests) {
+            await test();
+        }
     },
 
     async commandenum() {
@@ -679,41 +690,46 @@ Tester.concurrency({
     },
 
     async checkPacketNames() {
-        const wrongNames = new Map<string, string | string[]>([
-            ['', ['UpdateTradePacket', 'UpdateEquipPacket']],
-            ['ShowModalFormPacket', 'ModalFormRequestPacket'],
-            ['SpawnParticleEffect', 'SpawnParticleEffectPacket'],
-            ['ResourcePacksStackPacket', 'ResourcePackStackPacket'],
-            ['PositionTrackingDBServerBroadcast', 'PositionTrackingDBServerBroadcastPacket'],
-            ['PositionTrackingDBClientRequest', 'PositionTrackingDBClientRequestPacket'],
-            ['NPCDialoguePacket', 'NpcDialoguePacket'],
-            ['AddEntityPacket', 'AddEntity'],
-            ['EduUriResource', 'EduUriResourcePacket'],
-            ['CreatePhoto', 'CreatePhotoPacket'],
-            ['UpdateSubChunkBlocks', 'UpdateSubChunkBlocksPacket'],
-            ['ItemStackRequest', 'ItemStackRequestPacket'],
-            ['ItemStackResponse', 'ItemStackResponsePacket'],
-            ['MapItemDataPacket', 'ClientboundMapItemData']
+        const wrongNames = new Map<string, string|null>([
+            ['UpdateTradePacket', ''],
+            ['UpdateEquipPacket', ''],
+            ['ModalFormRequestPacket', 'ShowModalFormPacket'],
+            ['SpawnParticleEffectPacket', 'SpawnParticleEffect'],
+            ['ResourcePackStackPacket', 'ResourcePacksStackPacket'],
+            ['PositionTrackingDBServerBroadcastPacket', 'PositionTrackingDBServerBroadcast'],
+            ['PositionTrackingDBClientRequestPacket', 'PositionTrackingDBClientRequest'],
+            ['NpcDialoguePacket', 'NPCDialoguePacket'],
+            ['AddEntity', 'AddEntityPacket'],
+            ['ItemStackRequestPacket', 'ItemStackRequest'],
+            ['ItemStackResponsePacket', 'ItemStackResponse'],
+            ['ClientboundMapItemData', 'MapItemDataPacket'],
+            ['AdventureSettingsPacket', null],
         ]);
 
         for (const id in PacketIdToType) {
             try {
                 const Packet = PacketIdToType[+id as keyof PacketIdToType];
-                const packet = Packet.allocate();
+                let expected = wrongNames.get(Packet.name);
 
-                let getNameResult = packet.getName();
-                const realname = wrongNames.get(getNameResult);
-                let name = Packet.name;
-
-                if (Array.isArray(realname)) {
-                    getNameResult = realname.find((v) => v === name) ?? getNameResult;
-                } else if (realname != null) {
-                    getNameResult = realname;
+                let packet:Packet;
+                try {
+                    packet = Packet.allocate();
+                } catch (err) {
+                    if (err.message.endsWith(' is not created')) {
+                        this.equals(expected, null, err.message);
+                        continue;
+                    } else {
+                        throw err;
+                    }
                 }
 
-                this.equals(getNameResult, name);
+                let getNameResult = packet.getName();
+                if (expected === undefined) expected = Packet.name;
+
+                this.equals(getNameResult, expected);
                 this.equals(packet.getId(), Packet.ID);
 
+                let name = Packet.name;
                 const idx = name.lastIndexOf('Packet');
                 if (idx !== -1) name = name.substr(0, idx) + name.substr(idx+6);
                 this.equals(MinecraftPacketIds[Packet.ID], name);
