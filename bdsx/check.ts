@@ -9,6 +9,8 @@ import * as colors from 'colors';
 import { InstallInfo } from './installer/installinfo';
 import { Config } from './config';
 
+const BDSVersion = bdsVersionJson.version;
+
 function checkInstallInfoAndExit():never {
     function check(versionKey:keyof InstallInfo, oversion:string):void {
         const installed = installInfo[versionKey];
@@ -61,4 +63,4 @@ const versions = [
     (proc['?RevisionVersion@SharedConstants@@3HB'].getInt32()+100).toString().substr(1),
 ];
 const bdsVersion = versions.join('.');
-checkAndReport('BDS', bdsVersion, bdsVersionJson);
+checkAndReport('BDS', bdsVersion, BDSVersion);

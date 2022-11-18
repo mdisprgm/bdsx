@@ -17,14 +17,16 @@ import { InstallInfo } from './installinfo';
 import { GitHubClient } from './publisher';
 
 const sep = path.sep;
+const BDS_IS_PREVIEW = BDS_VERSION_DEFAULT.preview;
 
 const BDS_LINK_DEFAULT = 'https://minecraft.azureedge.net/bin-win/bedrock-server-%BDS_VERSION%.zip';
+const BDS_PREVIEW_LINK_DEFAULT = 'https://minecraft.azureedge.net/bin-win-preview/bedrock-server-%BDS_VERSION%.zip';
 const BDSX_CORE_LINK_DEFAULT = 'https://github.com/bdsx/bdsx-core/releases/download/%BDSX_CORE_VERSION%/bdsx-core-%BDSX_CORE_VERSION%.zip';
 const PDBCACHE_LINK_DEFAULT = 'https://github.com/bdsx/pdbcache/releases/download/%BDS_VERSION%/pdbcache.zip';
 
-const BDS_VERSION = process.env.BDSX_BDS_VERSION || BDS_VERSION_DEFAULT;
+const BDS_VERSION = process.env.BDSX_BDS_VERSION || BDS_VERSION_DEFAULT.version;
 const BDSX_CORE_VERSION = process.env.BDSX_CORE_VERSION || BDSX_CORE_VERSION_DEFAULT;
-const BDS_LINK = replaceVariable(process.env.BDSX_BDS_LINK || BDS_LINK_DEFAULT);
+const BDS_LINK = replaceVariable(process.env.BDSX_BDS_LINK || BDS_IS_PREVIEW ? BDS_PREVIEW_LINK_DEFAULT : BDS_LINK_DEFAULT);
 const BDSX_CORE_LINK = replaceVariable(process.env.BDSX_CORE_LINK || BDSX_CORE_LINK_DEFAULT);
 const PDBCACHE_LINK = replaceVariable(process.env.BDSX_PDBCACHE_LINK || PDBCACHE_LINK_DEFAULT);
 
