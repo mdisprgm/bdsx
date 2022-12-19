@@ -7,6 +7,7 @@ import { AbstractClass, MantleClass, nativeClass, NativeClass, nativeField, Nati
 import { bin64_t, bool_t, CxxString, CxxStringWith8Bytes, float32_t, int16_t, int32_t, int64_as_float_t, int8_t, NativeType, uint16_t, uint32_t, uint8_t } from "../nativetype";
 import { ActorDefinitionIdentifier, ActorLink, ActorRuntimeID, ActorUniqueID } from "./actor";
 import { AttributeInstanceHandle } from "./attribute";
+import { MolangVariableMap } from "./behavior";
 import { BlockPos, ChunkPos, Vec2, Vec3 } from "./blockpos";
 import { ConnectionRequest, JsonValue } from "./connreq";
 import { CxxOptional } from "./cxxoptional";
@@ -1448,6 +1449,8 @@ export class SpawnParticleEffectPacket extends Packet {
     readonly pos: Vec3;
     @nativeField(CxxString)
     particleName: CxxString;
+    @nativeField(MolangVariableMap)
+    molangVariables: MolangVariableMap;
 }
 
 /** @deprecated use SpawnParticleEffectPacket, follow real class name */
