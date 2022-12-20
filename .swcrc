@@ -1,0 +1,17 @@
+{
+    "sourceMaps": "inline",
+    "exclude": [
+        ".*\\.js$"
+    ],
+    "jsc": {
+        "parser": {
+            "syntax": "typescript",
+            "decorators": true
+        },
+        "target": "es2017"
+    },
+    "module": {
+        "type": "commonjs",
+        "importInterop": "none"
+    }
+}
