@@ -1,6 +1,5 @@
 import { asmcode } from "../asm/asmcode";
 import { Register } from "../assembler";
-import { BlockPos, ChunkPos, RelativeFloat, Vec2, Vec3 } from "./blockpos";
 import { bin } from "../bin";
 import { capi } from "../capi";
 import { commandParser } from "../commandparser";
@@ -23,8 +22,10 @@ import { Abilities, AbilitiesIndex, AbilitiesLayer, Ability, LayeredAbilities } 
 import { Actor, ActorDamageByActorSource, ActorDamageCause, ActorDamageSource, ActorDefinitionIdentifier, ActorRuntimeID, ActorType, ActorUniqueID, DimensionId, DistanceSortedActor, EntityContext, EntityContextBase, EntityRefTraits, ItemActor, Mob, OwnerStorageEntity, WeakEntityRef } from "./actor";
 import { AttributeId, AttributeInstance, BaseAttributeMap } from "./attribute";
 import { Bedrock } from "./bedrock";
+import { MolangVariableMap } from "./behavior";
 import { Biome } from "./biome";
 import { Block, BlockActor, BlockLegacy, BlockSource, BlockUtils, ChestBlockActor } from "./block";
+import { BlockPos, ChunkPos, RelativeFloat, Vec2, Vec3 } from "./blockpos";
 import { ChunkSource, LevelChunk } from "./chunk";
 import { CommandSymbols } from "./cmdsymbolloader";
 import * as command from './command';
@@ -561,6 +562,7 @@ Actor.prototype.isInLove = procHacker.js("?isInLove@Actor@@QEBA_NXZ", bool_t, {t
 Actor.prototype.isInLava = procHacker.js("?isInLava@Actor@@QEBA_NXZ", bool_t, {this:Actor});
 Actor.prototype.isInContactWithWater = procHacker.js("?isInContactWithWater@Actor@@QEBA_NXZ", bool_t, {this:Actor});
 Actor.prototype.isInClouds = procHacker.js("?isInClouds@Actor@@QEBA_NXZ", bool_t, {this:Actor});
+Actor.prototype.getMolangVariables = procHacker.js("?getMolangVariables@Actor@@QEAAAEAVMolangVariableMap@@XZ", MolangVariableMap, {this:Actor});
 
 Mob.prototype.getArmorValue = procHacker.jsv("??_7Mob@@6B@", "?getArmorValue@Mob@@UEBAHXZ", int32_t, {this:Actor});
 Mob.prototype.knockback = procHacker.jsv('??_7Mob@@6B@', '?knockback@Mob@@UEAAXPEAVActor@@HMMMMM@Z', void_t, {this:Mob}, Actor, int32_t, float32_t, float32_t, float32_t, float32_t, float32_t);

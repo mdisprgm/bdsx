@@ -10,6 +10,7 @@ import { mangle } from "../mangle";
 import { AbstractClass, nativeClass, NativeClass, nativeClassUtil, nativeField, NativeStruct } from "../nativeclass";
 import { bin64_t, bool_t, CxxString, float32_t, int32_t, int64_as_float_t, uint8_t } from "../nativetype";
 import { AttributeId, AttributeInstance, BaseAttributeMap } from "./attribute";
+import { MolangVariableMap } from './behavior';
 import type { BlockSource } from "./block";
 import { BlockPos, Vec2, Vec3 } from "./blockpos";
 import type { CommandPermissionLevel } from "./command";
@@ -1353,6 +1354,10 @@ export class Actor extends AbstractClass {
     }
 
     isInClouds(): boolean {
+        abstract();
+    }
+
+    getMolangVariables(): MolangVariableMap {
         abstract();
     }
 }
