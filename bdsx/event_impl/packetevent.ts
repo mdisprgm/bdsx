@@ -4,32 +4,20 @@ import { NetworkConnection, NetworkHandler, NetworkIdentifier } from "../bds/net
 import { createPacketRaw, ExtendedStreamReadResult, Packet, PacketSharedPtr, StreamReadResult } from "../bds/packet";
 import { MinecraftPacketIds } from "../bds/packetids";
 import { PacketIdToType } from "../bds/packets";
+import { ReadOnlyBinaryStream } from "../bds/stream";
 import { proc } from "../bds/symbols";
-import { abstract, CANCEL } from "../common";
-import { VoidPointer } from "../core";
+import { CANCEL } from "../common";
 import { decay } from "../decay";
 import { events } from "../event";
 import { bedrockServer } from "../launcher";
 import { makefunc } from "../makefunc";
 import { AbstractClass, nativeClass, nativeField } from "../nativeclass";
-import { bool_t, int32_t, int64_as_float_t, void_t } from "../nativetype";
+import { bool_t, int32_t, void_t } from "../nativetype";
 import { nethook } from "../nethook";
 import { CxxStringWrapper } from "../pointer";
 import { procHacker } from "../prochacker";
 import { CxxSharedPtr } from "../sharedpointer";
 import { remapAndPrintError } from "../source-map-support";
-
-@nativeClass(null)
-class ReadOnlyBinaryStream extends AbstractClass {
-    @nativeField(CxxStringWrapper.ref(), 0x38)
-    data:CxxStringWrapper;
-
-    read(dest:VoidPointer, size:number):boolean {
-        abstract();
-    }
-}
-
-ReadOnlyBinaryStream.prototype.read = procHacker.jsv('??_7ReadOnlyBinaryStream@@6B@', '?read@ReadOnlyBinaryStream@@EEAA_NPEAX_K@Z', bool_t, {this: ReadOnlyBinaryStream}, VoidPointer, int64_as_float_t);
 
 @nativeClass(null)
 class OnPacketRBP extends AbstractClass {
