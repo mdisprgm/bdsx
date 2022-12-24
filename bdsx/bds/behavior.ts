@@ -1,7 +1,7 @@
 import { abstract } from "../common";
 import { StaticPointer } from "../core";
 import { AbstractClass, nativeClass } from "../nativeclass";
-import { int32_t, NativeType } from "../nativetype";
+import { bool_t, int16_t, NativeType, void_t } from "../nativetype";
 import { procHacker } from "../prochacker";
 import { HashedString } from "./hashedstring";
 
@@ -13,9 +13,24 @@ export class MolangVariable extends AbstractClass {
 }
 
 @nativeClass(null)
-export class MolangVariableMap extends AbstractClass {}
+export class MolangVariableMap extends AbstractClass {
+    setMolangVariable(name: string, arg: MolangScriptArg): void;
+    setMolangVariable(index: MolangVariableIndex, arg: MolangScriptArg): void;
+    setMolangVariable(index: MolangVariableIndex | string, arg: MolangScriptArg): void {
+        if (typeof index === "string") {
+            const hashed = HashedString.constructWith(index);
+            setMolangVariableByName(this, hashed, arg);
+            hashed.destruct();
+        } else {
+            setMolangVariableById(this, index, arg);
+        }
+    }
+    getMolangVariable(index: MolangVariableIndex, unknown = false): MolangScriptArg {
+        abstract();
+    }
+}
 
-export enum MolangVariableIndex {
+export enum MolangVariableIndex /** : short */ {
     OriginX,
     OriginY,
     OriginZ,
@@ -38,7 +53,11 @@ MolangVariableMap[NativeType.dtor] = procHacker.js("??1MolangVariableMap@@QEAA@X
 MolangVariableMap[NativeType.ctor_copy] = procHacker.js("??0MolangVariableMap@@QEAA@AEBV0@@Z", MolangVariableMap, { this: MolangVariableMap }, StaticPointer);
 MolangVariableMap[NativeType.ctor_move] = procHacker.js("??0MolangVariableMap@@QEAA@$$QEAV0@@Z", MolangVariableMap, { this: MolangVariableMap }, StaticPointer);
 
-const MolangVariable$getVariableName = procHacker.js("?getVariableName@MolangVariable@@SAAEBVHashedString@@W4MolangVariableIndex@@@Z", HashedString, null, int32_t);
+const MolangVariable$getVariableName = procHacker.js("?getVariableName@MolangVariable@@SAAEBVHashedString@@W4MolangVariableIndex@@@Z", HashedString, null, int16_t);
 MolangVariable.getVariableName = function (index) {
     return MolangVariable$getVariableName(index).str;
 };
+
+const setMolangVariableById = procHacker.js("?setMolangVariable@MolangVariableMap@@QEAAXW4MolangVariableIndex@@AEBUMolangScriptArg@@@Z", void_t, null, MolangVariableMap, int16_t, MolangScriptArg);
+const setMolangVariableByName = procHacker.js("?setMolangVariable@MolangVariableMap@@QEAAXAEBVHashedString@@AEBUMolangScriptArg@@@Z", void_t, null, MolangVariableMap, HashedString, MolangScriptArg);
+MolangVariableMap.prototype.getMolangVariable = procHacker.js("?_getMolangVariable@MolangVariableMap@@AEBAPEBVMolangVariable@@W4MolangVariableIndex@@@Z", MolangScriptArg, { this: MolangVariableMap }, int16_t, bool_t);

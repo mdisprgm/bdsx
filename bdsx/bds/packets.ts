@@ -1461,7 +1461,7 @@ export class SpawnParticleEffectPacket extends Packet {
     @nativeField(CxxString)
     particleName: CxxString;
     @nativeField(MolangVariableMap)
-    molangVariables: MolangVariableMap;
+    readonly molangVariables: MolangVariableMap;
 }
 
 /** @deprecated use SpawnParticleEffectPacket, follow real class name */
