@@ -1360,6 +1360,7 @@ export class Actor extends AbstractClass {
     getMolangVariables(): MolangVariableMap {
         abstract();
     }
+
     /**
      * There is Actor::isRemoved in BDS
      * but customized for bdsx instead of hooking it.

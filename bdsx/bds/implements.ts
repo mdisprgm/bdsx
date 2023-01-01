@@ -61,7 +61,7 @@ import { AttributeId, AttributeInstance, BaseAttributeMap } from "./attribute";
 import { Bedrock } from "./bedrock";
 import { MolangVariableMap } from "./behavior";
 import { Biome } from "./biome";
-import { Block, BlockActor, BlockLegacy, BlockSource, BlockUtils, ChestBlockActor } from "./block";
+import { Block, BlockActor, BlockLegacy, BlockSource, BlockUtils, ChestBlockActor, PistonBlockActor } from "./block";
 import { BlockPos, ChunkPos, RelativeFloat, Vec2, Vec3 } from "./blockpos";
 import { ChunkSource, LevelChunk } from "./chunk";
 import { CommandSymbols } from "./cmdsymbolloader";
@@ -966,7 +966,7 @@ Actor.prototype.isInLava = procHacker.js("?isInLava@Actor@@QEBA_NXZ", bool_t, {
 });
 Actor.prototype.isInContactWithWater = procHacker.js("?isInContactWithWater@Actor@@QEBA_NXZ", bool_t, { this: Actor });
 Actor.prototype.isInClouds = procHacker.js("?isInClouds@Actor@@QEBA_NXZ", bool_t, { this: Actor });
-Actor.prototype.getMolangVariables = procHacker.js("?getMolangVariables@Actor@@QEAAAEAVMolangVariableMap@@XZ", MolangVariableMap, {this:Actor});
+Actor.prototype.getMolangVariables = procHacker.js("?getMolangVariables@Actor@@QEAAAEAVMolangVariableMap@@XZ", MolangVariableMap, { this: Actor });
 Actor.prototype.isBaby = procHacker.js("?isBaby@Actor@@QEBA_NXZ", bool_t, {
     this: Actor,
 });
@@ -2494,6 +2494,19 @@ ChestBlockActor.prototype.openBy = procHacker.js("?openBy@ChestBlockActor@@QEAAX
 ChestBlockActor.prototype.getPairedChestPosition = procHacker.js("?getPairedChestPosition@ChestBlockActor@@QEAAAEBVBlockPos@@XZ", BlockPos, {
     this: ChestBlockActor,
 });
+
+PistonBlockActor.prototype.getPosition = procHacker.js("?getPosition@BlockActor@@QEBAAEBVBlockPos@@XZ", BlockPos, { this: PistonBlockActor });
+PistonBlockActor.prototype.getAttachedBlocks = procHacker.js(
+    "?getAttachedBlocks@PistonBlockActor@@QEBAAEBV?$vector@VBlockPos@@V?$allocator@VBlockPos@@@std@@@std@@XZ",
+    CxxVectorToArray.make(BlockPos),
+    { this: PistonBlockActor },
+);
+PistonBlockActor.prototype.getFacingDir = procHacker.js(
+    "?getFacingDir@PistonBlockActor@@QEBAAEBVBlockPos@@AEBVIConstBlockSource@@@Z",
+    BlockPos,
+    { this: PistonBlockActor },
+    BlockSource,
+);
 
 BlockSource.prototype.getChunk = procHacker.js("?getChunk@BlockSource@@QEBAPEAVLevelChunk@@AEBVChunkPos@@@Z", LevelChunk, { this: BlockSource }, ChunkPos);
 BlockSource.prototype.getChunkAt = procHacker.js("?getChunkAt@BlockSource@@UEBAPEAVLevelChunk@@AEBVBlockPos@@@Z", LevelChunk, { this: BlockSource }, BlockPos);
