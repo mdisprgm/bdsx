@@ -10,13 +10,20 @@ export class ReadOnlyBinaryStream extends AbstractClass {
     @nativeField(VoidPointer)
     vftable: VoidPointer;
     @nativeField(CxxStringWrapper.ref(), 0x38)
-    data:CxxStringWrapper;
+    data: CxxStringWrapper;
 
-    read(dest:VoidPointer, size:number):boolean {
+    read(dest: VoidPointer, size: number): boolean {
         abstract();
     }
 }
-ReadOnlyBinaryStream.prototype.read = procHacker.jsv('??_7ReadOnlyBinaryStream@@6B@', '?read@ReadOnlyBinaryStream@@EEAA_NPEAX_K@Z', bool_t, {this: ReadOnlyBinaryStream}, VoidPointer, int64_as_float_t);
+ReadOnlyBinaryStream.prototype.read = procHacker.jsv(
+    "??_7ReadOnlyBinaryStream@@6B@",
+    "?read@ReadOnlyBinaryStream@@EEAA_NPEAX_K@Z",
+    bool_t,
+    { this: ReadOnlyBinaryStream },
+    VoidPointer,
+    int64_as_float_t,
+);
 
 @nativeClass(null)
 export class BinaryStream extends ReadOnlyBinaryStream {}
