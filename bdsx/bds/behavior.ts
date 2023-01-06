@@ -12,7 +12,7 @@ export class MolangVariable extends AbstractClass {
     }
 }
 
-@nativeClass(null)
+@nativeClass(0x38) // difference of offsets in SpawnParticleEffectPacket::write
 export class MolangVariableMap extends AbstractClass {
     setMolangVariable(name: string, arg: MolangScriptArg): void;
     setMolangVariable(index: MolangVariableIndex, arg: MolangScriptArg): void;
@@ -58,6 +58,26 @@ MolangVariable.getVariableName = function (index) {
     return MolangVariable$getVariableName(index).str;
 };
 
-const setMolangVariableById = procHacker.js("?setMolangVariable@MolangVariableMap@@QEAAXW4MolangVariableIndex@@AEBUMolangScriptArg@@@Z", void_t, null, MolangVariableMap, int16_t, MolangScriptArg);
-const setMolangVariableByName = procHacker.js("?setMolangVariable@MolangVariableMap@@QEAAXAEBVHashedString@@AEBUMolangScriptArg@@@Z", void_t, null, MolangVariableMap, HashedString, MolangScriptArg);
-MolangVariableMap.prototype.getMolangVariable = procHacker.js("?_getMolangVariable@MolangVariableMap@@AEBAPEBVMolangVariable@@W4MolangVariableIndex@@@Z", MolangScriptArg, { this: MolangVariableMap }, int16_t, bool_t);
+const setMolangVariableById = procHacker.js(
+    "?setMolangVariable@MolangVariableMap@@QEAAXW4MolangVariableIndex@@AEBUMolangScriptArg@@@Z",
+    void_t,
+    null,
+    MolangVariableMap,
+    int16_t,
+    MolangScriptArg,
+);
+const setMolangVariableByName = procHacker.js(
+    "?setMolangVariable@MolangVariableMap@@QEAAXAEBVHashedString@@AEBUMolangScriptArg@@@Z",
+    void_t,
+    null,
+    MolangVariableMap,
+    HashedString,
+    MolangScriptArg,
+);
+MolangVariableMap.prototype.getMolangVariable = procHacker.js(
+    "?_getMolangVariable@MolangVariableMap@@AEBAPEBVMolangVariable@@W4MolangVariableIndex@@@Z",
+    MolangScriptArg,
+    { this: MolangVariableMap },
+    int16_t,
+    bool_t,
+);
