@@ -15,7 +15,11 @@ let formIdCounter = MINIMUM_FORM_ID;
 class SentForm {
     public readonly id: number;
 
-    constructor(public readonly networkIdentifier: NetworkIdentifier, public readonly resolve: (data: FormResponse<any>) => void) {
+    constructor(
+        public readonly networkIdentifier: NetworkIdentifier,
+        public readonly resolve: (data: FormResponse<any>) => void,
+        public readonly formOption: Form.Options,
+    ) {
         // allocate id without duplication
         for (;;) {
             const id = formIdCounter++;
@@ -211,7 +215,7 @@ export class Form<DATA extends FormData> {
 
     static sendTo<T extends FormData["type"]>(target: NetworkIdentifier, data: FormData & { type: T }, opts?: Form.Options): Promise<FormResponse<T>> {
         return new Promise((resolve: (res: FormResponse<T>) => void) => {
-            const submitted = new SentForm(target, resolve);
+            const submitted = new SentForm(target, resolve, opts || {});
             const pk = ModalFormRequestPacket.allocate();
             pk.id = submitted.id;
             if (opts != null) opts.id = pk.id;
@@ -274,6 +278,17 @@ export namespace Form {
          * this function will record the id to it
          */
         id?: number;
+        /**
+         * a field for the output.
+         */
+        cancelationReason?: Form.CancelationReason;
+    }
+    /**
+     * @reference https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server-ui/formresponse#cancelationreason
+     */
+    export enum CancelationReason {
+        userClosed,
+        userBusy,
     }
 }
 
@@ -385,6 +400,7 @@ events.packetAfter(MinecraftPacketIds.ModalFormResponse).on((pk, ni) => {
     if (sent == null) return;
     if (sent.networkIdentifier !== ni) return; // other user is responding
     formMaps.delete(pk.id);
+    sent.formOption.cancelationReason = pk.cancelationReason.value();
     const result = pk.response.value();
     sent.resolve(result == null ? null : result.value());
 });

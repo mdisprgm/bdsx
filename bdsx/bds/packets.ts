@@ -25,6 +25,7 @@ import { MolangVariableMap } from "./behavior";
 import { BlockPos, ChunkPos, Vec2, Vec3 } from "./blockpos";
 import { ConnectionRequest, JsonValue } from "./connreq";
 import { CxxOptional } from "./cxxoptional";
+import type { Form } from "./form";
 import { HashedString } from "./hashedstring";
 import { ComplexInventoryTransaction, ContainerId, ContainerType, ItemStackNetIdVariant, NetworkItemStackDescriptor } from "./inventory";
 import { CompoundTag } from "./nbt";
@@ -229,6 +230,8 @@ export class SetTimePacket extends Packet {
 export class LevelSettings extends MantleClass {
     @nativeField(int64_as_float_t)
     seed: int64_as_float_t;
+    @nativeField(bool_t, 0x88)
+    customSkinsDisabled: bool_t;
 }
 
 @nativeClass(null)
@@ -1134,13 +1137,13 @@ export class UpdateTradePacket extends Packet {
     containerType: ContainerType;
     @nativeField(CxxString)
     displayName: CxxString;
-    @nativeField(uint8_t, 0x5c)
-    traderTier: uint8_t;
-    @nativeField(ActorUniqueID, 0x60)
+    @nativeField(int32_t, 0x5c)
+    traderTier: int32_t;
+    @nativeField(ActorUniqueID)
     entityId: ActorUniqueID;
-    @nativeField(ActorUniqueID, 0x68)
+    @nativeField(ActorUniqueID)
     lastTradingPlayer: ActorUniqueID;
-    @nativeField(CompoundTag, 0x70)
+    @nativeField(CompoundTag)
     data: CompoundTag;
 }
 
@@ -1333,11 +1336,15 @@ export type ShowModalFormPacket = ModalFormRequestPacket;
 export class ModalFormResponsePacket extends Packet {
     @nativeField(uint32_t)
     id: uint32_t;
-
     @nativeField(CxxOptional.make(JsonValue))
     response: CxxOptional<JsonValue>;
-    // @nativeField(CxxOptional.make(uint8_t))
-    // unknown:CxxOptional<uint8_t>;
+    /**
+     * @deprecated use cancelationReason
+     */
+    @nativeField(CxxOptional.make(uint8_t), { ghost: true })
+    unknown: CxxOptional<Form.CancelationReason>;
+    @nativeField(CxxOptional.make(uint8_t))
+    cancelationReason: CxxOptional<Form.CancelationReason>;
 }
 
 @nativeClass(null)
@@ -2353,7 +2360,7 @@ export const PacketIdToType = {
     0xc4: UpdateClientInputLocksPacket,
 };
 export type PacketIdToType = {
-    [key in keyof typeof PacketIdToType]: InstanceType<typeof PacketIdToType[key]>;
+    [key in keyof typeof PacketIdToType]: InstanceType<(typeof PacketIdToType)[key]>;
 };
 
 for (const [packetId, type] of Object.entries(PacketIdToType)) {

@@ -4,7 +4,6 @@ import type { CommandResult, CommandResultType } from "../commandresult";
 import { abstract } from "../common";
 import { StaticPointer, VoidPointer } from "../core";
 import { CxxVector } from "../cxxvector";
-import { decay } from "../decay";
 import { events } from "../event";
 import { mangle } from "../mangle";
 import { AbstractClass, nativeClass, NativeClass, nativeClassUtil, nativeField, NativeStruct } from "../nativeclass";
@@ -772,6 +771,12 @@ export class Actor extends AbstractClass {
      * Returns the BlockSource instance which the entity is ticking
      */
     getRegion(): BlockSource {
+        abstract();
+    }
+    /**
+     * @alias getRegion
+     */
+    getDimensionBlockSource(): BlockSource {
         abstract();
     }
     getUniqueIdLow(): number {

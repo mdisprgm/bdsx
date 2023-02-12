@@ -14,15 +14,15 @@ import { ConnectionRequest } from "./connreq";
 import type { Packet } from "./packet";
 import type { ServerPlayer } from "./player";
 import { RakNet } from "./raknet";
-import { RakNetInstance } from "./raknetinstance";
+import { RakNetConnector } from "./raknetinstance";
 
 // TODO: fill
 enum SubClientId {}
 
 export class NetworkHandler extends AbstractClass {
     vftable: VoidPointer;
-    /** @deprecated use bedrockServer.raknetInstance */
-    instance: RakNetInstance;
+    /** @deprecated use bedrockServer.connector */
+    instance: RakNetConnector;
 
     send(ni: NetworkIdentifier, packet: Packet, senderSubClientId: number): void;
     send(ni: NetworkIdentifier, packet: Packet, senderSubClientId: SubClientId): void;
@@ -42,6 +42,10 @@ export class NetworkHandler extends AbstractClass {
 
 export class NetworkConnection extends AbstractClass {
     networkIdentifier: NetworkIdentifier;
+
+    disconnect(): void {
+        abstract();
+    }
 }
 
 export namespace NetworkHandler {
