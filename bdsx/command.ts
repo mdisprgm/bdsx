@@ -207,7 +207,6 @@ export class CustomCommandFactory {
             CommandOrigin,
             CommandOutput,
         );
-
         this.registry.registerOverload(this.name, CustomCommandImpl, params);
         return this;
     }

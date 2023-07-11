@@ -166,22 +166,14 @@ export class EntityKnockbackEvent {
     ) {}
 }
 
-const MovMovementProxy$_getMob = procHacker.js("?_getMob@?$DirectMobMovementProxyImpl@UIPlayerMovementProxy@@@@UEAAPEAVMob@@XZ", Mob, null, VoidPointer);
-function onMobJump(movementProxy: VoidPointer, blockSourceInterface: VoidPointer): void {
-    const mob = MovMovementProxy$_getMob(movementProxy);
+function onMobJump(mob: Mob, blockSourceInterface: VoidPointer): void {
     if (mob instanceof Player) {
         const event = new PlayerJumpEvent(mob);
         events.playerJump.fire(event);
     }
-    return _onMobJump(movementProxy, blockSourceInterface);
+    return _onMobJump(mob, blockSourceInterface);
 }
-const _onMobJump = procHacker.hooking(
-    "?_jumpFromGround@Mob@@KAXAEAUIMobMovementProxy@@AEBVIConstBlockSource@@@Z",
-    void_t,
-    null,
-    VoidPointer,
-    VoidPointer,
-)(onMobJump);
+const _onMobJump = procHacker.hooking("?jumpFromGround@Mob@@IEAAXAEBVIConstBlockSource@@@Z", void_t, null, Mob, VoidPointer)(onMobJump);
 
 function onPlayerUseItem(player: Player, itemStack: ItemStack, useMethod: number, consumeItem: boolean): void {
     const event = new PlayerUseItemEvent(player, useMethod, consumeItem, itemStack);
@@ -333,7 +325,7 @@ function onEntityStopRiding(entity: Actor, exitFromRider: boolean, actorIsBeingD
     }
     return _onEntityStopRiding(event.entity, event.exitFromRider, event.actorIsBeingDestroyed, event.switchingRides);
 }
-const _onEntityStopRiding = procHacker.hooking("?stopRiding@Actor@@UEAAX_N00@Z", void_t, null, Actor, bool_t, bool_t, bool_t)(onEntityStopRiding);
+const _onEntityStopRiding = procHacker.hooking("?stopRiding@Actor@@QEAAX_N00@Z", void_t, null, Actor, bool_t, bool_t, bool_t)(onEntityStopRiding);
 
 function onEntitySneak(actorEventCoordinator: VoidPointer, entity: Actor, isSneaking: boolean): void {
     const event = new EntitySneakEvent(entity, isSneaking);

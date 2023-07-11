@@ -821,7 +821,7 @@ Actor.prototype.setScoreTag = procHacker.js(
 Actor.prototype.getDimensionBlockSource = Actor.prototype.getRegion = procHacker.js("?getDimensionBlockSource@Actor@@QEBAAEAVBlockSource@@XZ", BlockSource, {
     this: Actor,
 });
-Actor.prototype.getUniqueIdPointer = procHacker.js("?getUniqueID@Actor@@QEBAAEBUActorUniqueID@@XZ", StaticPointer, { this: Actor });
+Actor.prototype.getUniqueIdPointer = procHacker.js("?getOrCreateUniqueID@Actor@@QEBAAEBUActorUniqueID@@XZ", StaticPointer, { this: Actor });
 Actor.prototype.getEntityTypeId = procHacker.jsv("??_7Actor@@6B@", "?getEntityTypeId@Actor@@UEBA?AW4ActorType@@XZ", int32_t, { this: Actor }); // ActorType getEntityTypeId()
 Actor.prototype.getRuntimeID = procHacker.js("?getRuntimeID@Actor@@QEBA?AVActorRuntimeID@@XZ", ActorRuntimeID, { this: Actor, structureReturn: true });
 Actor.prototype.getDimension = procHacker.js("?getDimension@Actor@@QEBAAEAVDimension@@XZ", Dimension, { this: Actor });
@@ -1463,7 +1463,7 @@ class UserEntityIdentifierComponent extends NativeClass {
 EntityContextBase.prototype.isValid = procHacker.js("?isValid@EntityContextBase@@QEBA_NXZ", bool_t, { this: EntityContextBase });
 
 const Registry_getEntityIdentifierComponent = procHacker.js(
-    "??$try_get@VUserEntityIdentifierComponent@@@?$basic_registry@VEntityId@@V?$allocator@VEntityId@@@std@@@entt@@QEBA?A_PVEntityId@@@Z",
+    "??$try_get@VUserEntityIdentifierComponent@@@?$basic_registry@VEntityId@@V?$allocator@VEntityId@@@std@@@entt@@QEAA?A_PVEntityId@@@Z",
     UserEntityIdentifierComponent,
     null,
     VoidPointer,
@@ -1886,11 +1886,12 @@ ServerNetworkHandler.prototype._getServerPlayer = procHacker.js(
     int32_t,
 );
 const ServerNetworkHandler$disconnectClient = procHacker.js(
-    "?disconnectClient@ServerNetworkHandler@@QEAAXAEBVNetworkIdentifier@@W4SubClientId@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@Z",
+    "?disconnectClient@ServerNetworkHandler@@QEAAXAEBVNetworkIdentifier@@W4SubClientId@@W4DisconnectFailReason@Connection@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@Z",
     void_t,
     null,
     ServerNetworkHandler,
     NetworkIdentifier,
+    int32_t,
     int32_t,
     CxxString,
     bool_t,
@@ -1900,7 +1901,7 @@ ServerNetworkHandler.prototype.disconnectClient = function (
     message: string = "disconnectionScreen.disconnected",
     skipMessage: boolean = false,
 ): void {
-    ServerNetworkHandler$disconnectClient(this, client, /** subClientId */ 0, message, skipMessage);
+    ServerNetworkHandler$disconnectClient(this, client, /** subClientId */ 0, /** DisconnectFailReason*/ 0, message, skipMessage);
 };
 ServerNetworkHandler.prototype.allowIncomingConnections = procHacker.js(
     "?allowIncomingConnections@ServerNetworkHandler@@QEAAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@Z",
@@ -3612,11 +3613,12 @@ ProjectileItemComponent.prototype.shootProjectile = procHacker.js(
 //     { this: RecordItemComponent },
 // );
 RepairableItemComponent.prototype.handleItemRepair = procHacker.js(
-    "?handleItemRepair@RepairableItemComponent@@QEAA?AURepairItemResult@@AEAVItemStack@@0_N@Z",
+    "?handleItemRepair@RepairableItemComponent@@QEBA?AURepairItemResult@@AEAVItemStack@@0_N@Z",
     int32_t,
     { this: RepairableItemComponent },
     ItemStackBase,
     ItemStackBase,
+    bool_t,
 );
 ThrowableItemComponent.prototype.getLaunchPower = procHacker.js(
     "?_getLaunchPower@ThrowableItemComponent@@AEBAMHHH@Z",

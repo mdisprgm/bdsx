@@ -166,9 +166,9 @@ NetworkIdentifier.setResolver(ptr => {
 export let networkSystem: NetworkSystem;
 
 procHacker.hookingRawWithCallOriginal(
-    "?onConnectionClosed@NetworkSystem@@EEAAXAEBVNetworkIdentifier@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@Z",
+    "?onConnectionClosed@NetworkSystem@@EEAAXAEBVNetworkIdentifier@@W4DisconnectFailReason@Connection@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@Z",
     makefunc.np(
-        (handler, ni, msg) => {
+        (handler, ni, failReason, msg) => {
             try {
                 events.networkDisconnected.fire(ni);
             } catch (err) {
@@ -184,6 +184,7 @@ procHacker.hookingRawWithCallOriginal(
         { name: "hook of NetworkIdentifier dtor" },
         NetworkSystem,
         NetworkIdentifier,
+        int32_t,
         CxxStringWrapper,
     ),
     [Register.rcx, Register.rdx, Register.r8, Register.r9],

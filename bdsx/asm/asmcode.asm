@@ -510,19 +510,19 @@ export def createPacketRaw:qword
 export def enabledPacket:byte[PACKET_ID_COUNT]
 
 export proc packetRawHook
-    ; r14 - packetId
+    ; r15 - packetId
     lea rax, enabledPacket
-    mov al, byte ptr[rax+r14]
+    mov al, byte ptr[rax+r15]
     unwind
     test al, al
     jz _skipEvent
     mov rcx, rbp ; rbp
-    mov edx, r14d ; packetId
+    mov edx, r15d ; packetId
     mov r8, r13 ; Connection
     jmp onPacketRaw
  _skipEvent:
-    mov edx, r14d
-    lea rcx, [rbp-0x20] ; packet
+    mov edx, dword ptr ss:[rbp+0xD0]
+    lea rcx, [rbp+0xE0] ; packet
     jmp createPacketRaw
 endp
 
@@ -538,7 +538,7 @@ export proc packetBeforeHook
     test eax, eax
     jz _skipEvent
     lea rcx, enabledPacket
-    movzx ecx, byte ptr[rcx+r14]
+    movzx ecx, byte ptr[rcx+r15]
     test ecx, ecx
     jz _skipEvent
     ; stack unwinded
@@ -572,21 +572,21 @@ endp
 export def onPacketAfter:qword
 export def handlePacket:qword
 export proc packetAfterHook
-    ; r14 - packetId
+    ; r15 - packetId
     stack 28h
 
     ; orignal codes
-    mov r8, r15 ; packet shared ptr
+    mov r8, r14 ; packet shared ptr
     mov rdx, r13 ; networkIdentifier
-    mov rcx, [rbp-20h] ; packet
+    mov rcx, [rbp+E0h] ; packet
     call handlePacket
 
     lea r10, enabledPacket
-    mov al, byte ptr[r10+r14]
+    mov al, byte ptr[r10+r15]
     unwind
     test al, al
     jz _skipEvent
-    mov rcx, [rbp-20h] ; packet
+    mov rcx, [rbp+E0h] ; packet
     mov rdx, r13 ; networkIdentifier
     jmp onPacketAfter
 _skipEvent:

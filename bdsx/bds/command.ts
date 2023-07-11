@@ -949,7 +949,7 @@ export enum CommandParameterOption {
     HasSemanticConstraint,
 }
 
-@nativeClass()
+@nativeClass(0x60)
 export class CommandParameterData extends NativeClass {
     @nativeField(typeid_t)
     tid: typeid_t<CommandRegistry>; // 0x00
@@ -1338,8 +1338,8 @@ export class Command extends NativeClass {
     ): CommandParameterData {
         const cmdclass = this as NativeClassType<any>;
         const paramType = cmdclass.typeOf(key as string);
-        const offset = cmdclass.offsetOf(key as string);
-        const flag_offset = keyForIsSet !== null ? cmdclass.offsetOf(keyForIsSet as string) : -1;
+        const offset = 0; // cmdclass.offsetOf(key as string);
+        const flag_offset = keyForIsSet !== null ? cmdclass.offsetOf(keyForIsSet as string) : 0;
         return Command.manual(name, paramType, offset, flag_offset, false, enumNameOrPostfix, type, options);
     }
     static optional<CMD extends Command, KEY extends keyof CMD, KEY_ISSET extends KeysFilter<CMD, bool_t> | null>(
@@ -1353,15 +1353,15 @@ export class Command extends NativeClass {
     ): CommandParameterData {
         const cmdclass = this as NativeClassType<any>;
         const paramType = cmdclass.typeOf(key as string);
-        const offset = cmdclass.offsetOf(key as string);
-        const flag_offset = keyForIsSet !== null ? cmdclass.offsetOf(keyForIsSet as string) : -1;
+        const offset = 0; // cmdclass.offsetOf(key as string);
+        const flag_offset = keyForIsSet !== null ? cmdclass.offsetOf(keyForIsSet as string) : 0;
         return Command.manual(name, paramType, offset, flag_offset, true, enumNameOrPostfix, type, options);
     }
     static manual(
         name: string,
         paramType: Type<any>,
         offset: number,
-        flag_offset: number = -1,
+        flag_offset: number = 0,
         optional: boolean = false,
         enumNameOrPostfix?: string | null,
         type: CommandParameterDataType = CommandParameterDataType.NORMAL,
@@ -1495,12 +1495,12 @@ MinecraftCommands.getOutputType = procHacker.js("?getOutputType@MinecraftCommand
 CommandRegistry.abstract({
     enumValues: [CxxVector.make(CxxString), 192],
     enums: [CxxVector.make(CommandRegistry.Enum), 216], // accessed in CommandRegistry::addEnumValuesToExisting
-    enumLookup: [CxxMap.make(CxxString, uint32_t), 288], // 0x120
-    enumValueLookup: [CxxMap.make(CxxString, uint64_as_float_t), 304], // accessed in CommandRegistry::findEnumValue
-    commandSymbols: [CxxVector.make(CommandRegistry.Symbol), 320], // accessed in CommandRegistry::findEnumValue
-    signatures: [CxxMap.make(CxxString, CommandRegistry.Signature), 344], // accessed in CommandRegistry::findCommand
-    softEnums: [CxxVector.make(CommandRegistry.SoftEnum), 488],
-    softEnumLookup: [CxxMap.make(CxxString, uint32_t), 512],
+    enumLookup: [CxxMap.make(CxxString, uint32_t), 0x150], // 0x150
+    enumValueLookup: [CxxMap.make(CxxString, uint64_as_float_t), 0x160], // accessed in CommandRegistry::findEnumValue
+    commandSymbols: [CxxVector.make(CommandRegistry.Symbol), 0x170],
+    signatures: [CxxMap.make(CxxString, CommandRegistry.Signature), 0x1a8], // accessed in CommandRegistry::findCommand, after called Util::toLower
+    softEnums: [CxxVector.make(CommandRegistry.SoftEnum), 0x228], // accessed in CommandRegistry::setSoftEnumValues
+    softEnumLookup: [CxxMap.make(CxxString, uint32_t), 0x240], // accessed in CommandRegistry::setSoftEnumValues
 });
 CommandRegistry.prototype.registerOverloadInternal = procHacker.js(
     "?registerOverloadInternal@CommandRegistry@@AEAAXAEAUSignature@1@AEAUOverload@1@@Z",

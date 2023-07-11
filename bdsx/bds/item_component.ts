@@ -1,7 +1,7 @@
 import { abstract } from "../common";
 import { NativeClass } from "../nativeclass";
 import { Actor } from "./actor";
-import { Block, BlockLegacy, BlockSource } from "./block";
+import { Block, BlockSource } from "./block";
 import { Vec3 } from "./blockpos";
 import { HashedString } from "./hashedstring";
 import type { ItemDescriptor, ItemStack, ItemStackBase } from "./inventory";
@@ -170,7 +170,7 @@ export class RenderOffsetsItemComponent extends ItemComponent {}
 type RepairItemResult = number;
 
 export class RepairableItemComponent extends ItemComponent {
-    handleItemRepair(itemStackBase: ItemStackBase, _itemStackBase: ItemStackBase): RepairItemResult {
+    handleItemRepair(itemStackBase: ItemStackBase, _itemStackBase: ItemStackBase, unknown = false): RepairItemResult {
         abstract();
     }
 }
