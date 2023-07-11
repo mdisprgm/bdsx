@@ -1,18 +1,18 @@
 import { asmcode } from "../asm/asmcode";
 import { Register } from "../assembler";
-import { NetworkConnection, NetworkSystem, NetworkIdentifier } from "../bds/networkidentifier";
-import { createPacketRaw, ExtendedStreamReadResult, Packet, PacketSharedPtr, StreamReadResult } from "../bds/packet";
+import { NetworkConnection, NetworkIdentifier, NetworkSystem } from "../bds/networkidentifier";
+import { ExtendedStreamReadResult, Packet, PacketSharedPtr, StreamReadResult, createPacketRaw } from "../bds/packet";
 import { MinecraftPacketIds } from "../bds/packetids";
 import { PacketIdToType } from "../bds/packets";
 import { proc } from "../bds/symbols";
-import { abstract, CANCEL } from "../common";
+import { CANCEL, abstract } from "../common";
 import { VoidPointer } from "../core";
 import { decay } from "../decay";
 import { events } from "../event";
 import { bedrockServer } from "../launcher";
 import { makefunc } from "../makefunc";
 import { AbstractClass, nativeClass, nativeField } from "../nativeclass";
-import { bool_t, int32_t, int64_as_float_t, void_t } from "../nativetype";
+import { int32_t, int64_as_float_t, void_t } from "../nativetype";
 import { nethook } from "../nethook";
 import { CxxStringWrapper } from "../pointer";
 import { procHacker } from "../prochacker";
@@ -24,15 +24,15 @@ class ReadOnlyBinaryStream extends AbstractClass {
     @nativeField(CxxStringWrapper.ref(), 0x38)
     data: CxxStringWrapper;
 
-    read(dest: VoidPointer, size: number): boolean {
+    read(dest: VoidPointer, size: number): VoidPointer {
         abstract();
     }
 }
 
 ReadOnlyBinaryStream.prototype.read = procHacker.jsv(
     "??_7ReadOnlyBinaryStream@@6B@",
-    "?read@ReadOnlyBinaryStream@@EEAA_NPEAX_K@Z",
-    bool_t,
+    "?read@ReadOnlyBinaryStream@@EEAA?AV?$Result@XVerror_code@std@@@Bedrock@@PEAX_K@Z",
+    VoidPointer, // BedrockResult::<void, std::error_code>
     { this: ReadOnlyBinaryStream },
     VoidPointer,
     int64_as_float_t,
@@ -76,9 +76,9 @@ function onPacketRaw(rbp: OnPacketRBP, packetId: MinecraftPacketIds, conn: Netwo
     }
     return createPacketRaw(rbp.packet, packetId);
 }
-function onPacketBefore(packet: Packet, result: ExtendedStreamReadResult): bool_t {
+function onPacketBefore(packet: Packet, result: ExtendedStreamReadResult): int32_t {
     try {
-        if (result.streamReadResult !== StreamReadResult.Pass) return false;
+        if (result.streamReadResult !== StreamReadResult.Pass) return 0;
         const packetId = packet.getId();
         const target = events.packetBefore(packetId);
         if (target !== null && !target.isEmpty()) {
@@ -90,7 +90,7 @@ function onPacketBefore(packet: Packet, result: ExtendedStreamReadResult): bool_
                     try {
                         if (listener(typedPacket, ni, packetId) === CANCEL) {
                             result.streamReadResult = StreamReadResult.Ignore;
-                            return false;
+                            return 0;
                         }
                     } catch (err) {
                         events.errorFire(err);
@@ -103,7 +103,7 @@ function onPacketBefore(packet: Packet, result: ExtendedStreamReadResult): bool_
     } catch (err) {
         remapAndPrintError(err);
     }
-    return true;
+    return 1;
 }
 function onPacketAfter(packet: Packet, ni: NetworkIdentifier): void {
     try {
@@ -184,7 +184,7 @@ function onPacketSendInternal(handler: NetworkSystem, ni: NetworkIdentifier, pac
 
 bedrockServer.withLoading().then(() => {
     const handleViolationSymbol =
-        "?_handleViolation@PacketViolationHandler@@AEAA?AW4PacketViolationResponse@@W4MinecraftPacketIds@@W4StreamReadResult@@AEBVNetworkIdentifier@@PEA_N@Z";
+        "?_handleViolation@PacketViolationHandler@@AEAA?AW4PacketViolationResponse@@W4MinecraftPacketIds@@AEBVerror_code@std@@AEBVNetworkIdentifier@@PEA_N@Z";
     const packetHandleSymbol = "?handle@Packet@@QEAAXAEBVNetworkIdentifier@@AEAVNetEventCallback@@AEAV?$shared_ptr@VPacket@@@std@@@Z";
     const sendToMultipleSymbol =
         "?sendToMultiple@NetworkSystem@@QEAAXAEBV?$vector@UNetworkIdentifierWithSubId@@V?$allocator@UNetworkIdentifierWithSubId@@@std@@@std@@AEBVPacket@@@Z";
@@ -196,23 +196,23 @@ bedrockServer.withLoading().then(() => {
     procHacker.patching(
         "hook-packet-raw",
         packetizeSymbol,
-        0x266,
+        0x2d7,
         asmcode.packetRawHook, // original code depended
         Register.rax,
         true,
         // prettier-ignore
         [
-            0x41, 0x8B, 0xD6,             // mov edx,r14d
-            0x48, 0x8D, 0x4D, 0xE0,       // lea rcx,qword ptr ss:[rbp-20]
+            0x8B, 0x95, 0xD0, 0x00, 0x00, 0x00,             // mov edx,dword ptr ss:[rbp+D0]
+            0x48, 0x8D, 0x8D, 0xE0, 0x00, 0x00, 0x00,   // lea rcx,qword ptr ss:[rbp+E0]
             0xE8, null, null, null, null, // call <bedrock_server.public: static class std::shared_ptr<class Packet> __cdecl MinecraftPackets::createPacket(enum MinecraftPacketIds)>
             0x90,                         // nop
         ],
     );
 
     // hook before
-    asmcode.onPacketBefore = makefunc.np(onPacketBefore, bool_t, { name: "onPacketBefore" }, Packet, ExtendedStreamReadResult);
+    asmcode.onPacketBefore = makefunc.np(onPacketBefore, int32_t /**enum PacketViolationResponse */, { name: "onPacketBefore" }, Packet, VoidPointer);
     asmcode.packetBeforeOriginal = procHacker.hookingRaw(
-        "?readNoHeader@Packet@@QEAA_NAEAVReadOnlyBinaryStream@@AEBW4SubClientId@@AEAUExtendedStreamReadResult@@@Z",
+        "?readNoHeader@Packet@@QEAA?AV?$Result@XVerror_code@std@@@Bedrock@@AEAVReadOnlyBinaryStream@@AEBW4SubClientId@@@Z",
         asmcode.packetBeforeHook,
     );
 
@@ -236,15 +236,15 @@ bedrockServer.withLoading().then(() => {
     procHacker.patching(
         "hook-packet-after",
         packetizeSymbol,
-        0x4e9,
+        0x64f,
         asmcode.packetAfterHook, // original code depended
         Register.rax,
         true,
         // prettier-ignore
         [
-            0x4D, 0x8B, 0xC7,              // mov r8,r15
+            0x4D, 0x8B, 0xC6,              // mov r8,r14
             0x49, 0x8B, 0xD5,              // mov rdx,r13
-            0x48, 0x8B, 0x4D, 0xE0,        // mov rcx,qword ptr ss:[rbp-20]
+            0x48, 0x8B, 0x8D, 0xE0, 0x00, 0x00, 0x00,        // mov rcx,qword ptr ss:[rbp+E0]
             0xE8, null, null, null, null,  // call <bedrock_server.public: void __cdecl Packet::handle(class NetworkIdentifier const & __ptr64,class NetEventCallback & __ptr64,class std::shared_ptr<class Packet> & __ptr64) __ptr64>
         ],
     );

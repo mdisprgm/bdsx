@@ -1856,8 +1856,8 @@ Packet.prototype.getName = procHacker.jsv(
 Packet.prototype.write = procHacker.jsv("??_7LoginPacket@@6B@", "?write@LoginPacket@@UEBAXAEAVBinaryStream@@@Z", void_t, { this: Packet }, BinaryStream);
 Packet.prototype.read = procHacker.jsv(
     "??_7LoginPacket@@6B@",
-    "?_read@LoginPacket@@EEAA?AUExtendedStreamReadResult@@AEAVReadOnlyBinaryStream@@@Z",
-    int32_t,
+    "?_read@LoginPacket@@EEAA?AV?$Result@XVerror_code@std@@@Bedrock@@AEAVReadOnlyBinaryStream@@@Z",
+    VoidPointer, // Bedrock::result<void, std::error_code>
     { this: Packet },
     BinaryStream,
 );

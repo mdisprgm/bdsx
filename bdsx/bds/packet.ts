@@ -1,5 +1,6 @@
 import { capi } from "../capi";
 import { abstract } from "../common";
+import { VoidPointer } from "../core";
 import { AbstractClass, AbstractMantleClass, nativeClass, nativeField } from "../nativeclass";
 import { CxxString, int32_t, uint32_t } from "../nativetype";
 import { procHacker } from "../prochacker";
@@ -52,7 +53,7 @@ export class Packet extends AbstractMantleClass {
     write(stream: BinaryStream): void {
         abstract();
     }
-    read(stream: BinaryStream): PacketReadResult {
+    read(stream: BinaryStream): VoidPointer /** TODO: implement Bedrock::Result<void, std::error_code> */ {
         abstract();
     }
 

@@ -1339,7 +1339,7 @@ export class Command extends NativeClass {
         const cmdclass = this as NativeClassType<any>;
         const paramType = cmdclass.typeOf(key as string);
         const offset = 0; // cmdclass.offsetOf(key as string);
-        const flag_offset = keyForIsSet !== null ? cmdclass.offsetOf(keyForIsSet as string) : 0;
+        const flag_offset = 0;
         return Command.manual(name, paramType, offset, flag_offset, false, enumNameOrPostfix, type, options);
     }
     static optional<CMD extends Command, KEY extends keyof CMD, KEY_ISSET extends KeysFilter<CMD, bool_t> | null>(
@@ -1354,7 +1354,7 @@ export class Command extends NativeClass {
         const cmdclass = this as NativeClassType<any>;
         const paramType = cmdclass.typeOf(key as string);
         const offset = 0; // cmdclass.offsetOf(key as string);
-        const flag_offset = keyForIsSet !== null ? cmdclass.offsetOf(keyForIsSet as string) : 0;
+        const flag_offset = 0;
         return Command.manual(name, paramType, offset, flag_offset, true, enumNameOrPostfix, type, options);
     }
     static manual(

@@ -1519,7 +1519,7 @@ export class NetworkStackLatencyPacket extends Packet {
     // unknown
 }
 
-@nativeClass(null)
+/** @deprecated not available */
 export class ScriptCustomEventPacket extends Packet {
     // unknown
 }
@@ -2246,7 +2246,7 @@ export class UpdateClientInputLocksPacket extends Packet {
     // unknown
 }
 
-@nativeClass(null)
+/** @deprecated not available */
 export class ClientCheatAbilityPacket extends Packet {
     // unknown
 }
@@ -2398,7 +2398,7 @@ export const PacketIdToType = {
     0x72: UpdateSoftEnumPacket,
     0x73: NetworkStackLatencyPacket,
     // 0x74: BlockPalette, // DEPRECATED
-    0x75: ScriptCustomEventPacket,
+    // 0x75: ScriptCustomEventPacket, // DEPRECATED
     0x76: SpawnParticleEffectPacket,
     0x77: AvailableActorIdentifiersPacket,
     0x78: LevelSoundEventPacketV2,
@@ -2476,7 +2476,7 @@ export const PacketIdToType = {
     0xc2: GameTestRequestPacket,
     0xc3: GameTestResultsPacket,
     0xc4: UpdateClientInputLocksPacket,
-    0xc5: ClientCheatAbilityPacket,
+    // 0xc5: ClientCheatAbilityPacket, // DEPRECATED
     0xc6: CameraPresetsPacket,
     0xc7: UnlockedRecipesPacket,
     0x12c: CameraInstructionPacket,
