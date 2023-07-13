@@ -959,31 +959,30 @@ export class CommandParameterData extends NativeClass {
     name: CxxString; // 0x10
 
     /** @deprecated Use {@link enumNameOrPostfix} instead */
-    @nativeField(VoidPointer, { ghost: true })
-    desc: VoidPointer | null; // 0x30
+    @nativeField(VoidPointer, { offset: 0x38, ghost: true })
+    desc: VoidPointer | null; // 0x38
     @nativeField(VoidPointer)
-    enumNameOrPostfix: VoidPointer | null; // 0x30, char*
-
+    enumNameOrPostfix: VoidPointer | null; // 0x38, char*
+    @nativeField(int32_t, 0x40)
+    type: CommandParameterDataType;
+    @nativeField(int32_t)
+    offset: int32_t; // 0x44
+    @nativeField(int32_t)
+    flag_offset: int32_t; // 0x48
+    @nativeField(bool_t)
+    optional: bool_t; // 0x4c
     /** @deprecated Use {@link enumOrPostfixSymbol} instead */
     @nativeField(int32_t, { ghost: true })
-    unk56: int32_t; // 0x38
+    unk56: int32_t; // 0x50
     @nativeField(int32_t)
-    enumOrPostfixSymbol: int32_t; // 0x38
-
-    @nativeField(int32_t)
-    type: CommandParameterDataType; // 0x3c
-    @nativeField(int32_t)
-    offset: int32_t; // 0x40
-    @nativeField(int32_t)
-    flag_offset: int32_t; // 0x44
-    @nativeField(bool_t)
-    optional: bool_t; // 0x48
-
+    enumOrPostfixSymbol: int32_t; // 0x50
+    @nativeField(uint8_t, 0x58)
+    unk58: uint8_t;
     /** @deprecated Use {@link options} instead */
     @nativeField(bool_t, { ghost: true })
     pad73: bool_t;
     @nativeField(uint8_t)
-    options: CommandParameterOption; // 0x49
+    options: CommandParameterOption; // 0x59
 }
 
 @nativeClass()

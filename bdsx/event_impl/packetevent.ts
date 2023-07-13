@@ -41,7 +41,7 @@ ReadOnlyBinaryStream.prototype.read = procHacker.jsv(
 @nativeClass(null)
 class OnPacketRBP extends AbstractClass {
     // stack memories of NetworkSystem::_sortAndPacketizeEvents
-    @nativeField(CxxSharedPtr.make(Packet), -0x20)
+    @nativeField(CxxSharedPtr.make(Packet), 0xe0)
     packet: CxxSharedPtr<Packet>; // NetworkSystem::_sortAndPacketizeEvents before Packet::readNoHeader
     @nativeField(ReadOnlyBinaryStream, 0x50)
     stream: ReadOnlyBinaryStream; // NetworkSystem::_sortAndPacketizeEvents before Packet::readNoHeader
