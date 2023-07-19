@@ -20,6 +20,9 @@
     "pdbcachegen": "bedrock_server\\pdbcachegen.exe \"./bedrock_server/bedrock_server.exe\" \"./bedrock_server/pdbcache.bin\""
   },
   "dependencies": {
+    "@bdsx/comandgo": "file:plugins/comandgo",
+    "@bdsx/first": "file:plugins/first",
+    "@bdsx/ostag": "^1.3.4",
     "bdsx": "file:bdsx",
     "blessed": "^0.1.81",
     "colors": "1.4.0 || ^1.4.3",
