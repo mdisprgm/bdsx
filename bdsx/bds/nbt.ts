@@ -9,6 +9,7 @@ import { AbstractClass, nativeClass, NativeClass, NativeClassType, nativeField }
 import { bin64_t, CxxString, float32_t, float64_t, int16_t, int32_t, int64_as_float_t, NativeType, uint8_t, void_t } from "../nativetype";
 import { Wrapper } from "../pointer";
 import { addSlashes, hexn, stripSlashes } from "../util";
+import { proc } from "./symbols";
 
 interface NBTStringifyable {
     stringify(indent?: number | string): string;
@@ -623,6 +624,10 @@ export class IntArrayTag extends Tag {
     @nativeField(TagMemoryChunk)
     data: TagMemoryChunk;
 
+    [NativeType.ctor](): void {
+        this.vftable = IntArrayTag.vftable;
+    }
+
     value(): Int32Array {
         return this.data.getAs(Int32Array);
     }
@@ -665,6 +670,8 @@ export class IntArrayTag extends Tag {
     [util.inspect.custom](depth: number, options: Record<string, any>): unknown {
         return `IntArrayTag ${util.inspect(this.data.getAs(Int32Array), options)}`;
     }
+
+    static readonly vftable = proc["??_7IntArrayTag@@6B@"];
 }
 
 export type NBT = Int32Array | Uint8Array | NBT.Compound | NBT[] | NBT.Primitive | NBT.Numeric | number | string | Tag | boolean | null;
@@ -894,6 +901,17 @@ export namespace NBT {
         return null;
     }
 
+    export function isCompound(nbt: NBT): nbt is Compound {
+        if (typeof nbt !== "object") return false;
+        if (nbt === null) return false;
+        if (nbt instanceof Tag) throw TypeError("Tag instance is not allowed");
+        if (nbt instanceof Int32Array) return false;
+        if (nbt instanceof Uint8Array) return false;
+        if (nbt instanceof Array) return false;
+        if (nbt instanceof Primitive) return false;
+        return true;
+    }
+
     /**
      * it will allocate the native NBT from the JS NBT.
      * boolean -> ByteTag
@@ -1032,12 +1050,16 @@ export namespace NBT {
                         if (exponential) break;
                         lastNumberIsDecimal = true;
                         p++;
-                        break;
                     } else if (chr === 0x45 || chr === 0x65) {
                         // E e
                         if (exponential) break;
                         exponential = true;
                         p++;
+                        const next = text.charCodeAt(p);
+                        if (next === 0x2b || next === 0x2d) {
+                            // +-
+                            p++;
+                        }
                     } else {
                         break _notNumber;
                     }

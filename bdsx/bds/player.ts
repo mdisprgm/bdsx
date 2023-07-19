@@ -1,4 +1,4 @@
-import { abstract, BuildPlatform, VectorXYZ, Direction } from "../common";
+import { abstract, BuildPlatform, Direction, VectorXYZ } from "../common";
 import { mce } from "../mce";
 import { float32_t } from "../nativetype";
 import { HasStorage, Storage } from "../storage";
@@ -10,13 +10,14 @@ import { Block } from "./block";
 import { BlockPos, Vec3 } from "./blockpos";
 import type { CommandPermissionLevel } from "./command";
 import { Certificate } from "./connreq";
+import type { GameMode } from "./gamemode";
 import { HashedString } from "./hashedstring";
-import { ArmorSlot, ContainerId, Item, ItemStack, PlayerInventory, PlayerUIContainer, PlayerUISlot } from "./inventory";
+import { ArmorSlot, ContainerId, EnderChestContainer, Item, ItemStack, PlayerInventory, PlayerUIContainer, PlayerUISlot } from "./inventory";
 import type { NetworkIdentifier, ServerNetworkHandler } from "./networkidentifier";
 import type { Packet } from "./packet";
 import {
-    BossEventPacket,
     PlayerListEntry as _PlayerListEntry,
+    BossEventPacket,
     PlaySoundPacket,
     ScorePacketInfo,
     SetDisplayObjectivePacket,
@@ -29,9 +30,32 @@ import {
 import { DisplaySlot } from "./scoreboard";
 import { SerializedSkin } from "./skin";
 
-export class Player extends Mob {
-    abilities: LayeredAbilities;
+namespace RawTextObject {
+    export interface Text {
+        text: string;
+    }
+    export interface Translate {
+        translate: string;
+        with?: string[];
+    }
+    export interface Score {
+        score: {
+            name: string;
+            objective: string;
+        };
+    }
+    export type Properties = Text | Translate | Score;
+}
+
+interface RawTextObject {
+    rawtext: RawTextObject.Properties[];
+}
+
+export class Player extends Mob implements HasStorage {
+    enderChestContainer: EnderChestContainer;
     playerUIContainer: PlayerUIContainer;
+    gameMode: GameMode;
+    deviceId: string;
 
     /** @deprecated Use `this.getSpawnDimension()` instead */
     get respawnDimension(): DimensionId {
@@ -41,7 +65,10 @@ export class Player extends Mob {
     get respawnPosition(): BlockPos {
         return this.getSpawnPosition();
     }
-    deviceId: string;
+    /** @deprecated use `this.getAbilities()` instead */
+    get abilities(): LayeredAbilities {
+        return this.getAbilities();
+    }
 
     protected _setName(name: string): void {
         abstract();
@@ -97,6 +124,13 @@ export class Player extends Mob {
      * Returns the player's skin
      */
     getSkin(): SerializedSkin {
+        abstract();
+    }
+
+    /**
+     * Returns the player's real name
+     */
+    getName(): string {
         abstract();
     }
 
@@ -445,7 +479,7 @@ export class Player extends Mob {
      * Returns whether the player is simulated
      */
     isSimulated(): this is SimulatedPlayer {
-        abstract();
+        return this instanceof SimulatedPlayer;
     }
 
     /**
@@ -494,30 +528,21 @@ export class Player extends Mob {
     isUsingItem(): boolean {
         abstract();
     }
-}
 
-namespace RawTextObject {
-    export interface Text {
-        text: string;
+    hasDimension(): boolean {
+        abstract();
     }
-    export interface Translate {
-        translate: string;
-        with?: string[];
-    }
-    export interface Score {
-        score: {
-            name: string;
-            objective: string;
-        };
-    }
-    export type Properties = Text | Translate | Score;
-}
 
-interface RawTextObject {
-    rawtext: RawTextObject.Properties[];
-}
+    getAbilities(): LayeredAbilities {
+        abstract();
+    }
 
-export class ServerPlayer extends Player implements HasStorage {
+    getSelectedItem(): ItemStack {
+        abstract();
+    }
+
+    // ServerPlayer fields
+
     static readonly [Storage.classId] = "player";
     [Storage.id](): string {
         return mce.UUID.toString(this.getUuid());
@@ -938,9 +963,11 @@ export class ServerPlayer extends Player implements HasStorage {
     getInputMode(): InputMode {
         abstract();
     }
-    setInputMode(mode: InputMode): void {
-        abstract();
-    }
+
+    // removed
+    // setInputMode(mode: InputMode): void {
+    //     abstract();
+    // }
     die(damageSource: ActorDamageSource): void {
         this.setAttribute(AttributeId.Health, 0);
         return super.die(damageSource);
@@ -950,6 +977,9 @@ export class ServerPlayer extends Player implements HasStorage {
         abstract();
     }
 }
+
+export const ServerPlayer = Player; // Player is always ServerPlayer on the server software.
+export type ServerPlayer = Player;
 
 export class SimulatedPlayer extends ServerPlayer {
     /**

@@ -47,8 +47,8 @@ function onQueryRegenerate(rakNetServerLocator: VoidPointer, data: AnnounceServe
     events.queryRegenerate.fire(event);
     data.motd = event.motd;
     data.levelname = event.levelname;
-    data.currentPlayers = event.currentPlayers;
     data.maxPlayers = event.maxPlayers;
+    data.currentPlayers = event.currentPlayers;
     return _onQueryRegenerate(rakNetServerLocator, data);
 }
 bedrockServer.afterOpen().then(() => bedrockServer.serverNetworkHandler.updateServerAnnouncement());

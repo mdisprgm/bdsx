@@ -42,6 +42,7 @@ import type {
     PlayerCritEvent,
     PlayerDimensionChangeEvent,
     PlayerDropItemEvent,
+    PlayerInteractEvent,
     PlayerInventoryChangeEvent,
     PlayerJoinEvent,
     PlayerJumpEvent,
@@ -58,10 +59,10 @@ import type {
 import type { LevelExplodeEvent, LevelSaveEvent, LevelTickEvent, LevelWeatherChangeEvent } from "./event_impl/levelevent";
 import type { ObjectiveCreateEvent, QueryRegenerateEvent, ScoreAddEvent, ScoreRemoveEvent, ScoreResetEvent, ScoreSetEvent } from "./event_impl/miscevent";
 import type { nethook } from "./nethook";
-import { remapError } from "./source-map-support";
+import { remapAndPrintError, remapError } from "./source-map-support";
+import { PACKET_ID_COUNT } from "./const";
 
-const PACKET_ID_COUNT = 0x100;
-const PACKET_EVENT_COUNT = 0x500;
+const PACKET_EVENT_COUNT = PACKET_ID_COUNT * 5;
 
 const enabledPacket = asmcode.addressof_enabledPacket;
 enabledPacket.fill(0, 256);
@@ -171,6 +172,8 @@ export namespace events {
     /** Cancellable */
     export const playerAttack = new Event<(event: PlayerAttackEvent) => void | CANCEL>();
     /** Cancellable */
+    export const playerInteract = new Event<(event: PlayerInteractEvent) => void | CANCEL>();
+    /** Cancellable */
     export const playerDropItem = new Event<(event: PlayerDropItemEvent) => void | CANCEL>();
     /** Not cancellable */
     export const playerInventoryChange = new Event<(event: PlayerInventoryChangeEvent) => void | CANCEL>();
@@ -203,7 +206,7 @@ export namespace events {
     export const itemUse = new Event<(event: ItemUseEvent) => void | CANCEL>();
     /** Cancellable.
      * Triggered when a player uses an item on a block. Cancelling this event will prevent the item from being used
-     * (e.g : flint and steel won't ignite block, seeds won't be planted, etc...)
+     * (e.g : flint and steel won't ignite block, seeds won't be planted, buckets won't be filled or poured, etc...)
      * To note : this event is triggered with every item, even if they are not usable on blocks.
      */
     export const itemUseOnBlock = new Event<(event: ItemUseOnBlockEvent) => void | CANCEL>();
@@ -380,7 +383,7 @@ export namespace events {
             remapError(err);
         }
         if (events.error.fire(err) !== CANCEL) {
-            console.error(err && ((err as any).stack || err));
+            remapAndPrintError(err as any);
         }
     }
 

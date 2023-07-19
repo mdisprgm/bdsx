@@ -10,7 +10,7 @@ import type { ChunkSource, LevelChunk } from "./chunk";
 import type { CommandName } from "./commandname";
 import type { Dimension } from "./dimension";
 import { HashedString } from "./hashedstring";
-import type { Container, ItemStack } from "./inventory";
+import type { Container, ItemStack, ItemStackBase } from "./inventory";
 import { CompoundTag, NBT } from "./nbt";
 import type { BlockActorDataPacket } from "./packets";
 import type { Player, ServerPlayer } from "./player";
@@ -81,14 +81,15 @@ export class BlockLegacy extends NativeClass {
     getDefaultState(): Block {
         abstract();
     }
-    tryGetStateFromLegacyData(data: uint16_t): Block {
+    tryGetStateFromLegacyData(data: uint16_t, u?: bool_t): Block {
         abstract();
     }
     getSilkTouchedItemInstance(block: Block): ItemStack {
         abstract();
     }
     getDestroySpeed(): number {
-        abstract();
+        // XXX: Polyfilled. but not sure it's a same feature.
+        return this.getDefaultState().getDestroySpeed();
     }
 }
 
@@ -98,7 +99,7 @@ export class Block extends NativeClass {
     vftable: VoidPointer;
     @nativeField(uint16_t)
     data: uint16_t;
-    @nativeField(BlockLegacy.ref(), 0x10)
+    @nativeField(BlockLegacy.ref(), 0x30)
     blockLegacy: BlockLegacy;
 
     /**
@@ -180,7 +181,10 @@ export class Block extends NativeClass {
     getTranslucency(): number {
         abstract();
     }
-    getExplosionResistance(actor: Actor | null = null): number {
+    /** @deprecated */
+    getExplosionResistance(actor: Actor | null): number;
+    getExplosionResistance(): number;
+    getExplosionResistance(actor?: Actor | null): number {
         abstract();
     }
     getComparatorSignal(blockSource: BlockSource, blockPos: BlockPos, facing: uint8_t): number {
@@ -261,6 +265,9 @@ export class BlockSource extends NativeClass {
     getBrightness(blockPos: BlockPos): number {
         abstract();
     }
+    checkBlockDestroyPermission(actor: Actor, blockPos: BlockPos, item: ItemStackBase, b: bool_t): bool_t {
+        abstract();
+    }
 }
 
 @nativeClass(null)
@@ -269,7 +276,7 @@ export class BlockActor extends NativeClass {
     vftable: VoidPointer;
 
     isChestBlockActor(): this is ChestBlockActor {
-        abstract();
+        return this instanceof ChestBlockActor;
     }
     /**
      * @param tag this function stores nbt values to this parameter

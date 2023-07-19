@@ -15,6 +15,8 @@ import { CompoundTag, NBT } from "./nbt";
 import type { ServerPlayer } from "./player";
 import { proc } from "./symbols";
 
+const CxxVectorString = CxxVector.make(CxxString);
+
 /**
  * Values from 1 to 100 are for a player's container counter.
  */
@@ -94,7 +96,13 @@ export enum CreativeItemCategory {
     Nature,
     Equipment,
     Items,
+    Commands,
+    /**
+     * @deprecated
+     * follow official name
+     */
     Uncategorized,
+    None = 6,
 }
 
 export enum HandSlot {
@@ -126,7 +134,7 @@ export class Item extends NativeClass {
     /**
      * Returns the category of the item in creative inventory
      */
-    getCreativeCategory(): number {
+    getCreativeCategory(): CreativeItemCategory {
         abstract();
     }
     getArmorValue(): number {
@@ -144,6 +152,9 @@ export class Item extends NativeClass {
     isArmor(): boolean {
         abstract();
     }
+    isMusicDisk(): boolean {
+        abstract();
+    }
     /**
      * Changes whether the item is allowed to be used in the offhand slot
      *
@@ -156,6 +167,9 @@ export class Item extends NativeClass {
         abstract();
     }
     getCooldownType(): HashedString {
+        abstract();
+    }
+    canDestroyInCreative(): boolean {
         abstract();
     }
 }
@@ -185,6 +199,18 @@ export class ComponentItem extends Item {
         abstract();
     }
 }
+
+const StringFromCreativeItemCategoryMap: Record<CreativeItemCategory, string> = {
+    [CreativeItemCategory.Construction]: "construction",
+    [CreativeItemCategory.Nature]: "nature",
+    [CreativeItemCategory.Equipment]: "equipment",
+    [CreativeItemCategory.Items]: "items",
+    [CreativeItemCategory.Commands]: "commands",
+
+    [CreativeItemCategory.All]: "none",
+    [CreativeItemCategory.Uncategorized]: "none",
+    [CreativeItemCategory.None]: "none",
+};
 
 @nativeClass(0x88)
 export class ItemStackBase extends NativeClass {
@@ -314,7 +340,6 @@ export class ItemStackBase extends NativeClass {
         abstract();
     }
     setCustomLore(lores: string[] | string): void {
-        const CxxVectorString = CxxVector.make(CxxString);
         const cxxvector = CxxVectorString.construct();
         if (typeof lores === "string") {
             cxxvector.push(lores);
@@ -425,7 +450,7 @@ export class ItemStackBase extends NativeClass {
         abstract();
     }
     getCategoryName(): string {
-        abstract();
+        return StringFromCreativeItemCategoryMap[this.getItem()?.getCreativeCategory() ?? 0];
     }
     canDestroySpecial(block: Block): boolean {
         abstract();
@@ -547,6 +572,8 @@ export class Inventory extends FillingContainer {
     }
 }
 
+export class EnderChestContainer extends FillingContainer {}
+
 export class PlayerUIContainer extends SimpleContainer {}
 
 export enum PlayerUISlot {
@@ -607,11 +634,11 @@ export enum PlayerUISlot {
 
 @nativeClass(null)
 export class PlayerInventory extends AbstractClass {
-    get container(): Inventory {
-        return this.getContainer();
-    }
+    @nativeField(Inventory.ref(), 0xc0) // accessed on PlayerInventory::add, first line
+    container: Inventory;
+
     getContainer(): Inventory {
-        abstract();
+        return this.container;
     }
 
     addItem(itemStack: ItemStack, linkEmptySlot: boolean): boolean {

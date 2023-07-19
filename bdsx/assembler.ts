@@ -58,11 +58,24 @@ enum MovOper {
 }
 
 enum FloatOper {
-    None,
-    Convert_f2i,
-    Convert_i2f,
-    ConvertTruncated_f2i,
-    ConvertPrecision,
+    None = 0,
+    Convert_f2i = 0x2d,
+    Convert_i2f = 0x2a,
+    ConvertTruncated_f2i = 0x2c,
+    ConvertPrecision = 0x5a,
+    Sqrt = 0x51,
+    Rsqrt = 0x52,
+    Rcp = 0x53,
+    And = 0x54,
+    Andn = 0x55,
+    Or = 0x56,
+    Xor = 0x57,
+    Add = 0x58,
+    Mul = 0x59,
+    Sub = 0x5c,
+    Min = 0x5d,
+    Div = 0x5e,
+    Max = 0x5f,
 }
 
 enum FloatOperSize {
@@ -514,13 +527,18 @@ export class X64Assembler {
 
     private pos: SourcePosition | null = null;
 
-    private _polynominal(text: string, offset: number, lineNumber: number): polynominal.Operand {
+    private _polynominal(text: string, lineNumber: number, offset: number): polynominal.Operand {
         let res = polynominal.parse(text, lineNumber, offset);
         for (const [name, value] of this.ids) {
             if (!(value instanceof Constant)) continue;
             res = res.defineVariable(name, value.value);
         }
         return res;
+    }
+    private _polynominalConstant(text: string, lineNumber: number, offset: number): number | null {
+        const value = this._polynominal(text, lineNumber, offset);
+        if (!(value instanceof polynominal.Constant)) return null;
+        return value.value;
     }
     private _polynominalToAddress(
         text: string,
@@ -532,7 +550,7 @@ export class X64Assembler {
         multiply: number;
         offset: number;
     } {
-        const poly = this._polynominal(text, offset, lineNumber).asAdditive();
+        const poly = this._polynominal(text, lineNumber, offset).asAdditive();
         let varcount = 0;
 
         function error(message: string, column: number = 0, width: number = text.length): never {
@@ -1977,23 +1995,11 @@ export class X64Assembler {
         }
         this._rex(r1, r2, null, size);
         this.put(0x0f);
-        switch (foper) {
-            case FloatOper.ConvertPrecision:
-                this.put(0x5a);
-                break;
-            case FloatOper.ConvertTruncated_f2i:
-                this.put(0x2c);
-                break;
-            case FloatOper.Convert_f2i:
-                this.put(0x2d);
-                break;
-            case FloatOper.Convert_i2f:
-                this.put(0x2a);
-                break;
-            default:
-                if (oper === MovOper.Write) this.put(0x11);
-                else this.put(0x10);
-                break;
+        if (foper !== FloatOper.None) {
+            this.put(foper);
+        } else {
+            if (oper === MovOper.Write) this.put(0x11);
+            else this.put(0x10);
         }
         return this._target(0, r1, r2, r3, r1, multiply, offset, oper);
     }
@@ -2108,6 +2114,45 @@ export class X64Assembler {
         return this._movsf(src, dest, null, multiply, offset, FloatOperSize.singlePrecision, MovOper.Read, FloatOper.Convert_f2i, size);
     }
 
+    sqrtps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Sqrt, OperationSize.dword);
+    }
+    rsqrtps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Rsqrt, OperationSize.dword);
+    }
+    rcpps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Rcp, OperationSize.dword);
+    }
+    andps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.And, OperationSize.dword);
+    }
+    andnps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Andn, OperationSize.dword);
+    }
+    orps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Or, OperationSize.dword);
+    }
+    xorps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Xor, OperationSize.dword);
+    }
+    addps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Add, OperationSize.dword);
+    }
+    mulps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Mul, OperationSize.dword);
+    }
+    subps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Sub, OperationSize.dword);
+    }
+    minps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Min, OperationSize.dword);
+    }
+    divps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Div, OperationSize.dword);
+    }
+    maxps_f_f(dest: FloatRegister, src: FloatRegister): this {
+        return this._movsf(src, dest, null, 1, 0, FloatOperSize.xmmword, MovOper.Register, FloatOper.Max, OperationSize.dword);
+    }
     cvtsd2ss_f_f(dest: FloatRegister, src: FloatRegister): this {
         return this._movsf(src, dest, null, 1, 0, FloatOperSize.doublePrecision, MovOper.Register, FloatOper.ConvertPrecision, OperationSize.dword);
     }
@@ -2721,7 +2766,7 @@ export class X64Assembler {
             }
         }
 
-        function parseType(type: string): TypeInfo {
+        const parseType = (type: string): TypeInfo => {
             let arraySize: number | null = null;
             let brace = type.indexOf("[");
             let type_base = type;
@@ -2734,7 +2779,7 @@ export class X64Assembler {
                 const braceInner = type.substring(brace, braceEnd).trim();
                 const trails = type.substr(braceEnd + 1).trim();
                 if (trails !== "") throw parser.error(`Unexpected characters '${trails}'`);
-                const res = polynominal.parseToNumber(braceInner);
+                const res = this._polynominalConstant(braceInner, parser.lineNumber, parser.matchedIndex);
                 if (res === null) throw parser.error(`Unexpected array length '${braceInner}'`);
                 arraySize = res!;
             }
@@ -2745,7 +2790,7 @@ export class X64Assembler {
             let bytes = size.bytes;
             if (arraySize !== null) bytes *= arraySize;
             return { bytes, size: size.size, align: size.bytes, arraySize };
-        }
+        };
 
         const readConstString = (addressCommand: boolean, encoding: BufferEncoding): void => {
             const quotedString = parser.readQuotedStringTo('"');
@@ -2775,11 +2820,10 @@ export class X64Assembler {
                         if (size == null) throw parser.error(`Unexpected type syntax '${type}'`);
                     }
                     const text = parser.readAll();
-                    const value = this._polynominal(text, parser.lineNumber, parser.matchedIndex);
-                    if (!(value instanceof polynominal.Constant)) {
+                    let valueNum = this._polynominalConstant(text, parser.lineNumber, parser.matchedIndex);
+                    if (valueNum === null) {
                         throw parser.error(`polynominal is not constant '${text}'`);
                     }
-                    let valueNum = value.value;
                     if (size !== null) {
                         switch (size.size) {
                             case OperationSize.byte:
@@ -2879,7 +2923,12 @@ export class X64Assembler {
 
                 const param = parser.readTo(",");
 
-                const constval = polynominal.parseToNumber(param);
+                let constval: number | null;
+                try {
+                    constval = this._polynominalConstant(param, parser.lineNumber, parser.matchedIndex);
+                } catch (err) {
+                    constval = null;
+                }
                 if (constval !== null) {
                     // number
                     if (isNaN(constval)) {

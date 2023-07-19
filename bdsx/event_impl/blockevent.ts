@@ -1,6 +1,6 @@
 import { Actor } from "../bds/actor";
 import { Block, BlockSource, ButtonBlock, ChestBlock, ChestBlockActor, PistonAction as PistonActorInBlockModule, PistonBlockActor } from "../bds/block";
-import { BlockPos } from "../bds/blockpos";
+import { BlockPos, Vec3 } from "../bds/blockpos";
 import { GameMode } from "../bds/gamemode";
 import { ItemStack } from "../bds/inventory";
 import { Player, ServerPlayer } from "../bds/player";
@@ -18,6 +18,10 @@ export class BlockDestroyEvent {
         public blockPos: BlockPos,
         public blockSource: BlockSource,
         public itemStack: ItemStack,
+        /**
+         * controls whether the server sends a deny effect, and is always 0 in all cases with the destroyer being a player
+         * @deprecated not implemented
+         */
         public generateParticle: boolean,
     ) {}
 }
@@ -74,24 +78,20 @@ export class ChestPairEvent {
 
 function onBlockDestroy(gamemode: GameMode, blockPos: BlockPos, face: number): boolean {
     const player = gamemode.actor as ServerPlayer;
-    /*  The original function we hooked was `BlockSource::checkBlockDestroyPermissions(BlockSource *this, Actor *entity, const BlockPos *pos, const ItemStack *item, bool generateParticle)`,
-        but it will be fired multiple times if `server-authoritative-block-breaking` is enabled
+    /********************
+     *   History
+     * BlockSource::checkBlockDestroyPermissions
+     * - fired multiple times if `server-authoritative-block-breaking` is enabled
+     * - It has three refs: AgentCommands::DestroyCommand::isDone, GameMode::_canDestroy, GameMode::destroyBlock
+     *
+     * GameMode::destroyBlock - does not fired on the survival mode.
+     * SurvivalMode::destroyBlock - it does not fire if the user changes the game mode to creative in game.
+     *
+     * GameMode::_creativeDestroyBlock - it did not work on server-authoritative-block-breaking=false
+     * current hooking point - SurvivalMode::destroyBlock & GameMode::destroyBlock
+     * - on server-authoritative-block-breaking=true & creative mode, GameMode::destroyBlock is fired twice
+     */
 
-        It has three refs:
-        1. `AgentCommands::DestroyCommand::isDone(AgentCommands::DestroyCommand *this)`:
-            BlockSource::checkBlockDestroyPermissions(Actor::getRegion(this->mTarget), this->mCommander, &pos, &ItemStack::EMPTY_ITEM, 1);
-
-        2. `GameMode::_canDestroy(GameMode *this, const BlockPos *pos, FacingID face)`:
-            entity = this->mPlayer;
-            BlockSource::checkBlockDestroyPermissions(Actor::getRegion(this->mPlayer), entity, pos, PlayerInventory::getSelectedItem(Player::getSupplies(entity)), Item::mGenerateDenyParticleEffect);
-            Note: Item::mGenerateDenyParticleEffect is a bool const of 0
-
-        3. `GameMode::destroyBlock(GameMode *this, const BlockPos *pos, FacingID face)`:
-            entity = this->mPlayer;
-            BlockSource::checkBlockDestroyPermissions(Actor::getRegion(this->mPlayer), entity, pos, Player::getSelectedItem(entity), 0);
-
-        `generateParticle` controls whether the server sends a deny effect, and is always 0 in all cases with the destroyer being a player
-    */
     const blockSource = player.getRegion();
     const itemStack = player.getMainhandSlot();
     const event = new BlockDestroyEvent(player, blockPos, blockSource, itemStack, false);
@@ -105,27 +105,70 @@ function onBlockDestroy(gamemode: GameMode, blockPos: BlockPos, face: number): b
         return _onBlockDestroy(gamemode, event.blockPos, face);
     }
 }
-const _onBlockDestroy = procHacker.hooking("?destroyBlock@GameMode@@UEAA_NAEBVBlockPos@@E@Z", bool_t, null, GameMode, BlockPos, uint8_t)(onBlockDestroy);
+const _onBlockDestroy = procHacker.hooking("?destroyBlock@SurvivalMode@@UEAA_NAEBVBlockPos@@E@Z", bool_t, null, GameMode, BlockPos, uint8_t)(onBlockDestroy);
 
-function onBlockDestructionStart(blockEventCoordinator: StaticPointer, player: Player, blockPos: BlockPos): void {
+function onCreativeBlockDestroy(gamemode: GameMode, blockPos: BlockPos, face: number): boolean {
+    const player = gamemode.actor as ServerPlayer;
+    const blockSource = player.getRegion();
+    const itemStack = player.getMainhandSlot();
+
+    if (player.isCreative()) {
+        // bypass the sword destroy issue
+        const item = itemStack.getItem();
+        if (item !== null && !item.canDestroyInCreative()) {
+            return _onCreativeBlockDestroy(gamemode, blockPos, face);
+        }
+    }
+
+    const event = new BlockDestroyEvent(player, blockPos, blockSource, itemStack, false);
+    const canceled = events.blockDestroy.fire(event) === CANCEL;
+    decay(blockPos);
+    decay(blockSource);
+    decay(itemStack);
+    if (canceled) {
+        return false;
+    } else {
+        return _onCreativeBlockDestroy(gamemode, event.blockPos, face);
+    }
+}
+const _onCreativeBlockDestroy = procHacker.hooking(
+    "?destroyBlock@GameMode@@UEAA_NAEBVBlockPos@@E@Z",
+    bool_t,
+    null,
+    GameMode,
+    BlockPos,
+    uint8_t,
+)(onCreativeBlockDestroy);
+
+function onBlockDestructionStart(blockEventCoordinator: StaticPointer, player: Player, blockPos: BlockPos, v: uint8_t): void {
     const event = new BlockDestructionStartEvent(player as ServerPlayer, blockPos);
     events.blockDestructionStart.fire(event);
     decay(blockPos);
-    return _onBlockDestructionStart(blockEventCoordinator, event.player, event.blockPos);
+    return _onBlockDestructionStart(blockEventCoordinator, event.player, event.blockPos, v);
 }
 const _onBlockDestructionStart = procHacker.hooking(
-    "?sendBlockDestructionStarted@BlockEventCoordinator@@QEAAXAEAVPlayer@@AEBVBlockPos@@@Z",
+    "?sendBlockDestructionStarted@BlockEventCoordinator@@QEAAXAEAVPlayer@@AEBVBlockPos@@E@Z",
     void_t,
     null,
     StaticPointer,
     Player,
     BlockPos,
+    uint8_t,
 )(onBlockDestructionStart);
 
-function onBlockPlace(blockSource: BlockSource, block: Block, blockPos: BlockPos, facing: number, actor: Actor, ignoreEntities: boolean): boolean {
-    const ret = _onBlockPlace(blockSource, block, blockPos, facing, actor, ignoreEntities);
+function onBlockPlace(
+    blockSource: BlockSource,
+    block: Block,
+    blockPos: BlockPos,
+    facing: number,
+    actor: Actor | null,
+    ignoreEntities: boolean,
+    unknown: Vec3,
+): boolean {
+    const ret = _onBlockPlace(blockSource, block, blockPos, facing, actor, ignoreEntities, unknown);
+    if (!(actor instanceof ServerPlayer)) return ret; // some mobs can call it. ignore all except players.
     if (!ret) return false;
-    const event = new BlockPlaceEvent(actor as ServerPlayer, block, blockSource, blockPos);
+    const event = new BlockPlaceEvent(actor, block, blockSource, blockPos);
     const canceled = events.blockPlace.fire(event) === CANCEL;
     decay(blockSource);
     decay(block);
@@ -137,7 +180,7 @@ function onBlockPlace(blockSource: BlockSource, block: Block, blockPos: BlockPos
     }
 }
 const _onBlockPlace = procHacker.hooking(
-    "?mayPlace@BlockSource@@QEAA_NAEBVBlock@@AEBVBlockPos@@EPEAVActor@@_N@Z",
+    "?mayPlace@BlockSource@@QEAA_NAEBVBlock@@AEBVBlockPos@@EPEAVActor@@_NVVec3@@@Z",
     bool_t,
     null,
     BlockSource,
@@ -146,6 +189,7 @@ const _onBlockPlace = procHacker.hooking(
     int32_t,
     Actor,
     bool_t,
+    Vec3,
 )(onBlockPlace);
 
 function onPistonMove(this: PistonBlockActor, blockSource: BlockSource): void_t {
@@ -374,20 +418,21 @@ const SculkShriekerBlock$_shriek = procHacker.hooking(
 export class SculkSensorActivateEvent {
     constructor(public region: BlockSource, public pos: BlockPos, public entity: Actor | null) {}
 }
-function onSculkSensorActivate(region: BlockSource, pos: BlockPos, entity: Actor | null, unknown: int32_t): void {
+function onSculkSensorActivate(region: BlockSource, pos: BlockPos, entity: Actor | null, unknown: int32_t, unknown2: int32_t): void {
     const event = new SculkSensorActivateEvent(region, pos, entity);
     const canceled = events.sculkSensorActivate.fire(event) === CANCEL;
     decay(region);
     decay(pos);
     if (canceled) return;
-    return sculkSensor$Activate(region, pos, entity, unknown);
+    return sculkSensor$setActivePhase(region, pos, entity, unknown, unknown2);
 }
-const sculkSensor$Activate = procHacker.hooking(
-    "?activate@SculkSensorBlock@@SAXAEAVBlockSource@@AEBVBlockPos@@PEAVActor@@H@Z",
+const sculkSensor$setActivePhase = procHacker.hooking(
+    "?setActivePhase@SculkSensorBlock@@SAXAEAVBlockSource@@AEBVBlockPos@@PEAVActor@@HH@Z",
     void_t,
     null,
     BlockSource,
     BlockPos,
     Actor,
+    int32_t,
     int32_t,
 )(onSculkSensorActivate);

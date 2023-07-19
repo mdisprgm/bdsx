@@ -9,13 +9,20 @@ const formMaps = new Map<number, SentForm>();
 //         But I set the minimum for the unexpected situation.
 const MINIMUM_FORM_ID = 0x10000000;
 const MAXIMUM_FORM_ID = 0x7fffffff; // 32bit signed integer maximum
+const FORM_TIMEOUT = 1000 * 60 * 10; // 10min. deleting timeout if the form response is too late.
 
 let formIdCounter = MINIMUM_FORM_ID;
 
 class SentForm {
     public readonly id: number;
+    public readonly timeout: NodeJS.Timeout;
 
-    constructor(public readonly networkIdentifier: NetworkIdentifier, public readonly resolve: (data: FormResponse<any>) => void) {
+    constructor(
+        public readonly networkIdentifier: NetworkIdentifier,
+        public readonly resolve: (data: FormResponse<any> | PromiseLike<FormResponse<any>>) => void,
+        public readonly reject: (err: unknown) => void,
+        public readonly formOption: Form.Options,
+    ) {
         // allocate id without duplication
         for (;;) {
             const id = formIdCounter++;
@@ -28,8 +35,21 @@ class SentForm {
                 break;
             }
         }
+
+        this.timeout = setTimeout(() => {
+            formMaps.delete(this.id);
+            this.reject(Error("form timeout"));
+        }, FORM_TIMEOUT);
     }
 }
+
+events.serverStop.on(() => {
+    for (const form of formMaps.values()) {
+        form.reject(Error("server closed"));
+        clearTimeout(form.timeout);
+    }
+    formMaps.clear();
+});
 
 export interface FormItemButton {
     text: string;
@@ -210,8 +230,8 @@ export class Form<DATA extends FormData> {
     constructor(public data: DATA) {}
 
     static sendTo<T extends FormData["type"]>(target: NetworkIdentifier, data: FormData & { type: T }, opts?: Form.Options): Promise<FormResponse<T>> {
-        return new Promise((resolve: (res: FormResponse<T>) => void) => {
-            const submitted = new SentForm(target, resolve);
+        return new Promise<FormResponse<T>>((resolve, reject) => {
+            const submitted = new SentForm(target, resolve, reject, opts || {});
             const pk = ModalFormRequestPacket.allocate();
             pk.id = submitted.id;
             if (opts != null) opts.id = pk.id;
@@ -274,6 +294,14 @@ export namespace Form {
          * this function will record the id to it
          */
         id?: number;
+        cancelationReason?: number;
+    }
+    /**
+     * @reference https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server-ui/formresponse#cancelationreason
+     */
+    export enum CancelationReason {
+        userClosed,
+        userBusy,
     }
 }
 
@@ -385,6 +413,8 @@ events.packetAfter(MinecraftPacketIds.ModalFormResponse).on((pk, ni) => {
     if (sent == null) return;
     if (sent.networkIdentifier !== ni) return; // other user is responding
     formMaps.delete(pk.id);
+    sent.formOption.cancelationReason = pk.cancelationReason.value();
     const result = pk.response.value();
     sent.resolve(result == null ? null : result.value());
+    clearTimeout(sent.timeout);
 });

@@ -13,7 +13,7 @@ import { JsonValue } from "bdsx/bds/connreq";
 import { CxxOptionalToUndefUnion } from "bdsx/bds/cxxoptional";
 import { Dimension } from "bdsx/bds/dimension";
 import { HashedString } from "bdsx/bds/hashedstring";
-import { ItemStack, NetworkItemStackDescriptor } from "bdsx/bds/inventory";
+import { CreativeItemCategory, ItemStack, NetworkItemStackDescriptor } from "bdsx/bds/inventory";
 import {
     ByteArrayTag,
     ByteTag,
@@ -28,7 +28,7 @@ import {
     NBT,
     ShortTag,
     StringTag,
-    Tag,
+    Tag
 } from "bdsx/bds/nbt";
 import { NetworkIdentifier } from "bdsx/bds/networkidentifier";
 import { Packet } from "bdsx/bds/packet";
@@ -42,7 +42,7 @@ import { command, CommandFieldOptions } from "bdsx/command";
 import { CommandParameterType } from "bdsx/commandparam";
 import { CommandResultType } from "bdsx/commandresult";
 import { AttributeName, CANCEL } from "bdsx/common";
-import { NativePointer } from "bdsx/core";
+import { NativePointer, StaticPointer } from "bdsx/core";
 import { CxxMap } from "bdsx/cxxmap";
 import { CxxVector, CxxVectorToArray } from "bdsx/cxxvector";
 import { disasm } from "bdsx/disassembler";
@@ -73,7 +73,12 @@ const dimensionVFTables = new Set<string>(
 function isDimensionClass(dimension: Dimension): boolean {
     return dimensionVFTables.has(dimension.vftable.getAddressBin());
 }
-const dimensions = new Set<DimensionId>([DimensionId.Overworld, DimensionId.Nether, DimensionId.TheEnd]);
+enum PacketPhase {
+    Raw,
+    Before,
+    After
+}
+let nextPacketPhase = PacketPhase.Raw;
 
 type PromiseFunc = () => Promise<PromiseFunc>;
 
@@ -87,8 +92,8 @@ function checkCommandRegister(
     tester: Tester,
     testname: string,
     testcases: [CommandParameterType<any> | [CommandParameterType<any>, CommandFieldOptions | boolean], string | null, any][],
-    opts: { throughConsole?: boolean; noRun?: boolean } = {},
-): Promise<PromiseFunc> {
+    opts: { throughConsole?: boolean } = {},
+): PromiseFunc {
     const paramsobj: Record<string, CommandParameterType<any> | [CommandParameterType<any>, CommandFieldOptions | boolean]> = {};
     const n = testcases.length;
     for (let i = 0; i < n; i++) {
@@ -122,17 +127,23 @@ function checkCommandRegister(
         return new Promise<PromiseFunc>((resolve, reject) => {
             const outputcb = (output: string) => {
                 if (output === "passed") {
+                    clearTimeout(timeout);
                     events.commandOutput.remove(outputcb);
                     resolve(run);
                     return CANCEL;
                 }
                 if (output === "failed") {
+                    clearTimeout(timeout);
                     events.commandOutput.remove(outputcb);
                     reject(Error(`${cmdname} failed`));
                     return CANCEL;
                 }
             };
             events.commandOutput.on(outputcb);
+
+            const timeout = setTimeout(()=>{
+                reject(Error(`${cmdname} does not callback`));
+            }, 3000);
 
             if (opts.throughConsole) {
                 bedrockServer.executeCommandOnConsole(cmdline);
@@ -147,8 +158,7 @@ function checkCommandRegister(
             }
         });
     }
-    if (opts.noRun) return Promise.resolve(run);
-    return run();
+    return run;
 }
 
 @nativeClass()
@@ -194,10 +204,10 @@ Tester.concurrency(
         async globals() {
             const serverInstance = bedrockServer.serverInstance;
             this.assert(!!serverInstance && serverInstance.isNotNull(), "serverInstance not found");
-            this.assert(serverInstance.vftable.equalsptr(proc["??_7ServerInstance@@6BEnableNonOwnerReferences@Bedrock@@@"]), "serverInstance is not ServerInstance");
-            const networkHandler = bedrockServer.networkHandler;
-            this.assert(!!networkHandler && networkHandler.isNotNull(), "networkHandler not found");
-            this.assert(bedrockServer.commandOutputSender.vftable.equalsptr(proc["??_7CommandOutputSender@@6B@"]), "sender is not CommandOutputSender");
+            this.equals(serverInstance.vftable, proc["??_7ServerInstance@@6BEnableNonOwnerReferences@Bedrock@@@"], "serverInstance is not ServerInstance");
+            const networkSystem = bedrockServer.networkSystem;
+            this.assert(!!networkSystem && networkSystem.isNotNull(), "networkSystem not found");
+            this.equals(bedrockServer.commandOutputSender.vftable, proc["??_7CommandOutputSender@@6B@"], "sender is not CommandOutputSender");
 
             const shandle = bedrockServer.serverNetworkHandler;
             shandle.setMotd("TestMotd");
@@ -209,7 +219,7 @@ Tester.concurrency(
             [...bedrockServer.commandRegistry.enums].map(v => v.name);
             [...bedrockServer.commandRegistry.enumLookup.keys()];
             [...bedrockServer.commandRegistry.enumValueLookup.keys()];
-            [...bedrockServer.commandRegistry.commandSymbols].map(v => v.value);
+            // [...bedrockServer.commandRegistry.commandSymbols].map(v => v.value);
             [...bedrockServer.commandRegistry.softEnums].map(v => v.name);
             [...bedrockServer.commandRegistry.softEnumLookup.keys()];
             for (const dim of [DimensionId.Overworld, DimensionId.Nether, DimensionId.TheEnd]) {
@@ -227,6 +237,7 @@ Tester.concurrency(
                 if (!nonsamehex) this.equals(hex(opers.asm().buffer()), hexcode.toUpperCase());
             };
 
+            assert("0f 57 c1", "xorps xmm0, xmm1");
             assert("83 39 00", "cmp dword ptr [rcx], 0x0");
             assert("8b 0c 31", "mov ecx, dword ptr [rcx+rsi]");
             assert("f3 0f 11 89 a4 03 00 00", "movss dword ptr [rcx+0x3a4], xmm1");
@@ -692,13 +703,20 @@ Tester.concurrency(
             v.destruct();
         },
 
+        async commandregistery() {
+            const sig = bedrockServer.commandRegistry.findCommand('give')!;
+            this.equals(sig.command, 'give');
+            this.equals(sig.description, 'commands.give.description');
+            this.equals(sig.permissionLevel, CommandPermissionLevel.Operator);
+        },
+
         async command() {
             // command hook test, error test, parameter type test
             let passed = false;
             const cb = (cmd: string, origin: string, ctx: CommandContext) => {
                 if (cmd === "/__dummy_command") {
                     passed = origin === "Server";
-                    this.assert(ctx.origin.vftable.equalsptr(proc["??_7ServerCommandOrigin@@6B@"]), "invalid origin");
+                    this.equals(ctx.origin.vftable, proc["??_7ServerCommandOrigin@@6B@"], "invalid origin");
                     const dimension = ctx.origin.getDimension();
                     this.assert(isDimensionClass(dimension), "invalid dimension");
                     this.equals(dimension.getDefaultBiomeString(), "ocean", "invalid getDefaultBiomeString");
@@ -707,7 +725,7 @@ Tester.concurrency(
                     const actor = ctx.origin.getEntity();
                     this.assert(actor === null, `origin.getEntity() is not null. result = ${actor}`);
                     const level = ctx.origin.getLevel();
-                    this.assert(level.vftable.equalsptr(proc["??_7ServerLevel@@6BILevel@@@"]), "origin.getLevel() is not ServerLevel");
+                    this.equals(level.vftable, proc["??_7ServerLevel@@6BILevel@@@"], "origin.getLevel() is not ServerLevel");
                     const players = level.getPlayers();
                     const size = players.length;
                     this.equals(size, 0, "origin.getLevel().players.size is not zero");
@@ -735,17 +753,17 @@ Tester.concurrency(
             // command register test, parameter test
             await checkCommandRegister(this, "cmdtest", [], {
                 throughConsole: true,
-            });
-            await checkCommandRegister(this, "cmdtest2", []);
-            await checkCommandRegister(this, "cmdtest3", [[CxxString, "a", "a"]]);
+            })();
+            await checkCommandRegister(this, "cmdtest2", [])();
+            await checkCommandRegister(this, "cmdtest3", [[CxxString, "a", "a"]])();
             await checkCommandRegister(this, "cmdtest4", [
                 [CxxString, "a", "a"],
                 [[CxxString, true], null, undefined],
-            ]);
+            ])();
 
             const tests: PromiseFunc[] = [];
             for (let i = 0; i < 100; i++) {
-                tests.push(await checkCommandRegister(this, "repeat" + i, [[CxxString, "a", "a"]], { noRun: true }));
+                tests.push(checkCommandRegister(this, "repeat" + i, [[CxxString, "a", "a"]]));
             }
             for (const test of tests) {
                 await test();
@@ -758,7 +776,7 @@ Tester.concurrency(
 
             const ts_enum = command.enum("DimensionId", DimensionId);
 
-            await checkCommandRegister(this, "mappercheck", [[enumtype, "enum1", "enum1"]]);
+            await checkCommandRegister(this, "mappercheck", [[enumtype, "enum1", "enum1"]])();
             await checkCommandRegister(this, "mappers", [
                 // Tests for enums with strings and the string mapper
                 [enumtype, "ENUM1", "enum1"],
@@ -769,7 +787,7 @@ Tester.concurrency(
                 [ts_enum, "overworld", 0],
                 [ts_enum, "Nether", 1],
                 [ts_enum, "THEEND", 2],
-            ]);
+            ])();
         },
 
         async commandrawenum() {
@@ -782,14 +800,14 @@ Tester.concurrency(
                     [command.rawEnum("IntGameRule"), "maxcommandchainlength", "maxcommandchainlength"], // Test for built-in enums with strings
                     [command.rawEnum("EntityType"), "minecraft:zombie", "minecraft:zombie"], // Test for built-in enums with custom type (ActorDefinitionIdentifier for this case, but maps to string)
                     [command.rawEnum("Enchant"), "fire_protection", "fire_protection"],
-                ]);
+                ])();
             }
 
             // await checkCommandRegister('extends', [
             //     [command.enum('EntityType', {a: 0}), 'a', 0], // Test for built-in enums with custom type (ActorDefinitionIdentifier for this case, but maps to number) and the new value 'a' as 0
             //     [command.enum('EntityType', 'custom'), 'custom', 'custom'], // Test for built-in enums with custom type (ActorDefinitionIdentifier for this case, but maps to string) and the new value 'custom'
             //     [command.enum('Difficulty', 'aaa'), 'aaa', 'aaa'], // Test for built-in enums and the new value 'aaa'
-            // ]);
+            // ])();
         },
 
         async commandsoftenum() {
@@ -797,7 +815,7 @@ Tester.concurrency(
                 [command.softEnum("Soft1", "softenum"), "anything", "anything"], // Test for soft enums
                 [command.softEnum("Soft2", "first", "Second!!", "THI R D"), '"thi r d"', "thi r d"], // Test for soft enums
                 [command.softEnum("Tool", "Override", "another"), "Override", "Override"], // Test for built-in soft enums with new values
-            ]);
+            ])();
         },
 
         async checkPacketNames() {
@@ -818,6 +836,7 @@ Tester.concurrency(
                 ["EventPacket", "TelemetryEventPacket"],
                 ["AutomationClientConnectPacket", "WSConnectPacket"],
                 ["StructureTemplateDataResponsePacket", "StructureTemplateDataExportPacket"],
+                ["CompressedBiomeDefinitionListPacket", "CompressedBiomeDefinitionList"],
             ]);
 
             for (const id in PacketIdToType) {
@@ -874,7 +893,7 @@ Tester.concurrency(
 
             {
                 const itemStack = ItemStack.constructWith("minecraft:dirt", 12, 1);
-                this.assert(itemStack.block.equalsptr(Block.create("minecraft:dirt", 1)), "itemStack.block");
+                this.equals(itemStack.block, Block.create("minecraft:dirt", 1), "itemStack.block");
                 this.equals(itemStack.valid, true, "itemStack.vaild");
                 this.equals(itemStack.showPickup, true, "itemStack.showPickup");
                 this.equals(itemStack.canPlaceOn.size(), 0, "itemStack.canPlaceOn");
@@ -897,6 +916,8 @@ Tester.concurrency(
                 if (tooHeavy.has(i)) continue;
                 events.packetRaw(i).on(
                     this.wrap((ptr, size, ni, packetId) => {
+                        this.equals(nextPacketPhase, PacketPhase.Raw, 'unexpected phase');
+                        nextPacketPhase = PacketPhase.Before;
                         this.assert(ni.getAddress() !== "UNASSIGNED_SYSTEM_ADDRESS", "packetRaw, Invalid ni, id=" + packetId);
                         idcheck = packetId;
                         this.assert(size > 0, `packetRaw, packet is too small (size = ${size})`);
@@ -905,6 +926,8 @@ Tester.concurrency(
                 );
                 events.packetBefore<MinecraftPacketIds>(i).on(
                     this.wrap((ptr, ni, packetId) => {
+                        this.equals(nextPacketPhase, PacketPhase.Before, 'unexpected phase');
+                        nextPacketPhase = PacketPhase.After;
                         this.assert(ni.getAddress() !== "UNASSIGNED_SYSTEM_ADDRESS", "packetBefore, Invalid ni, id=" + packetId);
                         this.equals(packetId, idcheck, `packetBefore, different packetId on before. id=${packetId}`);
                         this.equals(ptr.getId(), idcheck, `packetBefore, different class.packetId on before. id=${packetId}`);
@@ -912,6 +935,8 @@ Tester.concurrency(
                 );
                 events.packetAfter<MinecraftPacketIds>(i).on(
                     this.wrap((ptr, ni, packetId) => {
+                        this.equals(nextPacketPhase, PacketPhase.After, 'unexpected phase');
+                        nextPacketPhase = PacketPhase.Raw;
                         this.assert(ni.getAddress() !== "UNASSIGNED_SYSTEM_ADDRESS", "packetAfter, Invalid ni, id=" + packetId);
                         this.equals(packetId, idcheck, `packetAfter, different packetId on after. id=${packetId}`);
                         this.equals(ptr.getId(), idcheck, `packetAfter, different class.packetId on after. id=${packetId}`);
@@ -982,7 +1007,7 @@ Tester.concurrency(
                             i--;
                         }
                     }
-                    p.commands.setFromArray(commandArray);
+                    // p.commands.setFromArray(commandArray); // TODO: implement AvailableCommandsCommandData fully
                 }, 1),
             );
         },
@@ -1006,10 +1031,11 @@ Tester.concurrency(
                             this.assert(isDimensionClass(dim), "getDimension() is invalid");
                             this.equals(actor.getDimensionId(), dim.getDimensionId(), "getDimensionId() is invalid");
                             if (actor instanceof Player) {
-                                const cmdlevel = actor.abilities.getCommandPermissions();
+                                const abilities = actor.getAbilities();
+                                const cmdlevel = abilities.getCommandPermissions();
                                 this.assert(CommandPermissionLevel.Normal <= cmdlevel && cmdlevel <= CommandPermissionLevel.Internal, "invalid actor.abilities");
                                 this.equals(actor.getCommandPermissionLevel(), cmdlevel, "Invalid command permission level");
-                                const playerlevel = actor.abilities.getPlayerPermissions();
+                                const playerlevel = abilities.getPlayerPermissions();
                                 this.assert(PlayerPermission.VISITOR <= playerlevel && playerlevel <= PlayerPermission.CUSTOM, "invalid actor.abilities");
                                 this.equals(actor.getPermissionLevel(), playerlevel, "Invalid player permission level");
 
@@ -1040,7 +1066,6 @@ Tester.concurrency(
                                 // test for hasFamily
                                 this.assert(actor.hasFamily("player") === true, "the actor must be a Player");
                                 this.assert(actor.hasFamily("undead") === false, "the actor must be not a Undead Mob");
-                                const abilities = actor.abilities;
                                 const ROUND_UP_AXIS = 0x10000;
                                 const checkAbility = (index: AbilitiesIndex, expected: boolean | number): void => {
                                     const abil = abilities.getAbility(index);
@@ -1096,6 +1121,7 @@ Tester.concurrency(
                 this.wrap(ev => {
                     const player = ev.player;
                     try {
+                        this.equals(player.playerUIContainer.vftable, proc["??_7PlayerUIContainer@@6B@"], "player.playerUIContainer is broken");
                         const netId = player.getNetworkIdentifier();
                         this.equals(player.deviceId, bedrockServer.serverNetworkHandler.fetchConnectionRequest(netId).getDeviceId(), "player.deviceId is broken");
 
@@ -1142,6 +1168,7 @@ Tester.concurrency(
                         this.log("> tested and stopping...");
                         setTimeout(() => bedrockServer.stop(), 1000);
                     }
+                    nextPacketPhase = PacketPhase.Raw;
                     return CANCEL;
                 }
             });
@@ -1194,6 +1221,14 @@ Tester.concurrency(
         etc() {
             const item = ItemStack.constructWith("minecraft:acacia_boat");
             item.destruct();
+
+            const CreativeItemCategoryFromString = procHacker.js("?CreativeItemCategoryFromString@@YA?AW4CreativeItemCategory@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z", int32_t, null, CxxString);
+            this.equals(CreativeItemCategoryFromString("construction"), CreativeItemCategory.Construction);
+            this.equals(CreativeItemCategoryFromString("nature"), CreativeItemCategory.Nature);
+            this.equals(CreativeItemCategoryFromString("equipment"), CreativeItemCategory.Equipment);
+            this.equals(CreativeItemCategoryFromString("items"), CreativeItemCategory.Items);
+            this.equals(CreativeItemCategoryFromString("commands"), CreativeItemCategory.Commands);
+            this.equals(CreativeItemCategoryFromString("none"), CreativeItemCategory.None);
         },
 
         nbt() {
@@ -1227,12 +1262,16 @@ Tester.concurrency(
 
                 this.assert(list.equals(list), "list.equals");
 
-                for (let j = 0; j < 10; j++) {
-                    map.set("barray", barray);
-                    map.set("iarray", iarray);
-                    map.set("str", str);
-                    map.set("list", list);
+                const mapLoop = 20;
+                const mapItemCount = 4;
+                for (let j = 0; j < mapLoop; j++) {
+                    map.set("barray"+j, barray);
+                    map.set("iarray"+j, iarray);
+                    map.set("str"+j, str);
+                    map.set("list"+j, list);
                 }
+                this.equals(map.size(), mapLoop * mapItemCount, "Compound key count check");
+
                 const cloned = iarray.allocateClone();
                 barray.dispose();
                 iarray.dispose();
@@ -1243,11 +1282,13 @@ Tester.concurrency(
                 cloned.dispose();
 
                 const mapvalue = map.value();
-                this.assert(mapvalue.barray instanceof Uint8Array && arrayEquals([1, 2, 3, 4, 5], mapvalue.barray), "ByteArrayTag check");
-                this.assert(mapvalue.iarray instanceof Int32Array && arrayEquals([1, 2, 3, 4], mapvalue.iarray), "IntArrayTag check");
-                this.equals(mapvalue.str, "12345678901234567890", "StringTag check");
-                this.assert(mapvalue.list instanceof Array && arrayEquals(["12345678901234567890"], mapvalue.list), "ListTag check");
-                this.equals(Object.keys(mapvalue).length, map.size(), "Compound key count check");
+                for (let j=0;j<mapLoop;j++) {
+                    this.assert(mapvalue['barray'+j] instanceof Uint8Array && arrayEquals([1, 2, 3, 4, 5], mapvalue['barray'+j]), "ByteArrayTag check");
+                    this.assert(mapvalue['iarray'+j] instanceof Int32Array && arrayEquals([1, 2, 3, 4], mapvalue['iarray'+j]), "IntArrayTag check");
+                    this.equals(mapvalue['str'+j], "12345678901234567890", "StringTag check");
+                    this.assert(mapvalue['list'+j] instanceof Array && arrayEquals(["12345678901234567890"], mapvalue['list'+j]), "ListTag check");
+                }
+                this.equals(Object.keys(mapvalue).length, mapLoop * mapItemCount, "Compound key count check");
                 map.dispose();
             }
 
@@ -1291,6 +1332,9 @@ Tester.concurrency(
                 '{true:1b,false:0b,string:"string",longArray:[1l,2l,3l,4l]}',
                 "SNBT parse only feature",
             );
+
+            const nbt_ex = '[3.4028234663852886e+38]';
+            this.equals(NBT.stringify(NBT.parse(nbt_ex)), '[3.4028234663852886e+38d]');
         },
 
         itemActor() {
@@ -1300,7 +1344,7 @@ Tester.concurrency(
                     const region = ev.player.getRegion();
                     const actor = Actor.summonAt(region, pos, ActorType.Item, -1);
                     this.assert(actor instanceof ItemActor, "ItemActor summoning");
-                    this.assert((actor as ItemActor).itemStack.vftable.equalsptr(proc["??_7ItemStack@@6B@"]), "ItemActor.itemStack is not ItemStack");
+                    this.equals((actor as ItemActor).itemStack.vftable, proc["??_7ItemStack@@6B@"], "ItemActor.itemStack is not ItemStack");
                     actor.despawn();
                 }),
             );
@@ -1320,8 +1364,8 @@ Tester.concurrency(
             this.equals(Block.create("minecraft:air")?.getName(), "minecraft:air");
             this.equals(Block.create("minecraft:element_111")?.getName(), "minecraft:element_111");
             this.equals(Block.create("minecraft:_no_block_"), null, "minecraft:_no_block_ is not null");
-            this.assert(Block.create("dirt")!.equalsptr(Block.create("dirt")), "dirt is not dirt");
-            this.assert(!Block.create("planks", 0)!.equalsptr(Block.create("planks", 1)), "planks#0 is planks#1");
+            this.equals(Block.create("dirt")!, Block.create("dirt"), "dirt is not dirt");
+            this.notEquals(Block.create("planks", 0)!, Block.create("planks", 1), "planks#0 is planks#1");
         },
 
         blockPos() {

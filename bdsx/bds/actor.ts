@@ -1,17 +1,15 @@
 import * as colors from "colors";
 import { bin } from "../bin";
-import { CircularDetector } from "../circulardetector";
 import type { CommandResult, CommandResultType } from "../commandresult";
 import { abstract } from "../common";
 import { StaticPointer, VoidPointer } from "../core";
 import { CxxVector } from "../cxxvector";
-import { decay } from "../decay";
 import { events } from "../event";
 import { mangle } from "../mangle";
-import { AbstractClass, nativeClass, NativeClass, nativeClassUtil, nativeField, NativeStruct } from "../nativeclass";
-import { bin64_t, bool_t, CxxString, float32_t, int32_t, int64_as_float_t, uint16_t, uint8_t } from "../nativetype";
+import { AbstractClass, NativeClass, NativeStruct, nativeClass, nativeClassUtil, nativeField } from "../nativeclass";
+import { CxxString, bin64_t, bool_t, float32_t, int32_t, int64_as_float_t, uint8_t } from "../nativetype";
 import { AttributeId, AttributeInstance, BaseAttributeMap } from "./attribute";
-import type { BlockSource } from "./block";
+import { Block, BlockSource } from "./block";
 import { BlockPos, Vec2, Vec3 } from "./blockpos";
 import type { CommandPermissionLevel } from "./command";
 import { CxxOptional } from "./cxxoptional";
@@ -70,6 +68,7 @@ export enum ActorType {
     Bee = 0x17a,
     Piglin,
     PiglinBrute = 0x17f,
+    Allay = 0x186,
 
     PathfinderMob = 0x300,
     IronGolem = 0x314,
@@ -94,6 +93,7 @@ export enum ActorType {
     Vex,
     Pillager = 0xb72,
     ElderGuardianGhost = 0xb78,
+    Warden = 0xb83,
 
     Animal = 0x1300,
     Chicken = 0x130a,
@@ -111,6 +111,8 @@ export enum ActorType {
     Strider,
     Goat = 0x1380,
     Axolotl = 0x1382,
+    Frog = 0x1384,
+    Sniffer = 0x138b,
 
     WaterAnimal = 0x2300,
     Squid = 0x2311,
@@ -120,6 +122,7 @@ export enum ActorType {
     Tropicalfish = 0x236f,
     Fish,
     GlowSquid = 0x2381,
+    Tadpole = 0x2385,
 
     TameableAnimal = 0x5300,
     Wolf = 0x530e,
@@ -188,7 +191,7 @@ export enum ActorType {
 
     AbstractArrow = 0x800000,
     Trident = 0x0c00049,
-    Arrow,
+    Arrow = 0xc00050,
     VillagerBase = 0x1000300,
     Villager = 0x100030f,
     VillagerV2 = 0x1000373,
@@ -221,6 +224,8 @@ export class ActorDefinitionIdentifier extends NativeClass {
 
 @nativeClass(0x10)
 export class ActorDamageSource extends NativeClass {
+    @nativeField(VoidPointer)
+    vftable: VoidPointer;
     @nativeField(int32_t, 0x08)
     cause: int32_t;
 
@@ -248,14 +253,60 @@ export class ActorDamageSource extends NativeClass {
     getDamagingEntityUniqueID(): ActorUniqueID {
         abstract();
     }
+
+    isEntitySource(): this is ActorDamageByActorSource {
+        return this instanceof ActorDamageByActorSource;
+    }
+
+    isChildEntitySource(): this is ActorDamageByChildActorSource {
+        return this instanceof ActorDamageByChildActorSource;
+    }
+
+    isBlockSource(): this is ActorDamageByBlockSource {
+        return this instanceof ActorDamageByBlockSource;
+    }
+}
+
+@nativeClass(0x30)
+export class ActorDamageByBlockSource extends ActorDamageSource {
+    /**
+     * Magma, Stalactite, and Stalagmite are confirmed as used in BDS
+     */
+    static create(block: Block, cause: ActorDamageCause): ActorDamageByBlockSource;
+    static create(this: never, cause: ActorDamageCause): ActorDamageSource;
+    static create(block: Block | ActorDamageCause, cause?: ActorDamageCause): ActorDamageByBlockSource {
+        abstract();
+    }
+
+    @nativeField(Block.ref())
+    block: Block;
 }
 
 @nativeClass(0x50)
 export class ActorDamageByActorSource extends ActorDamageSource {
-    static constructWith(this: never, cause: ActorDamageCause): ActorDamageSource;
     static constructWith(damagingEntity: Actor, cause?: ActorDamageCause): ActorDamageByActorSource;
+    static constructWith(this: never, cause: ActorDamageCause): ActorDamageSource;
     static constructWith(damagingEntity: Actor | ActorDamageCause, cause: ActorDamageCause = ActorDamageCause.EntityAttack): ActorDamageByActorSource {
         abstract();
+    }
+}
+
+@nativeClass(0x80)
+export class ActorDamageByChildActorSource extends ActorDamageByActorSource {
+    static constructWith(childEntity: Actor, damagingEntity: Actor, cause?: ActorDamageCause): ActorDamageByChildActorSource;
+    static constructWith(this: never, cause: ActorDamageCause): ActorDamageSource;
+    static constructWith(this: never, damagingEntity: Actor, cause?: ActorDamageCause): ActorDamageByActorSource;
+    static constructWith(
+        childEntity: Actor | ActorDamageCause,
+        damagingEntity?: Actor | ActorDamageCause,
+        cause: ActorDamageCause = ActorDamageCause.Projectile,
+    ): ActorDamageByChildActorSource {
+        abstract();
+    }
+
+    getChildEntityUniqueId(): ActorUniqueID {
+        // not official name, there is not a method for child entity in BDS
+        return this.getBin64(0x58); // accessed in ActorDamageByChildActorSource::ActorDamageByChildActorSource
     }
 }
 
@@ -291,8 +342,13 @@ export enum ActorDamageCause {
     Fireworks,
     Lightning,
     Charging,
-    Temperature = 0x1a,
-    All = 0x1f,
+    Temperature,
+    Freeze,
+    Stalactite,
+    Stalagmite,
+    RamAttack,
+    SonicBoom,
+    All = 0x22,
 }
 
 export enum ActorFlags {
@@ -426,9 +482,6 @@ export class ActorLink extends NativeStruct {
 }
 
 @nativeClass(null)
-export class EntityContext extends AbstractClass {}
-
-@nativeClass(null)
 export class OwnerStorageEntity extends AbstractClass {
     _getStackRef(): EntityContext {
         abstract();
@@ -456,7 +509,9 @@ export class WeakEntityRef extends AbstractClass {
 
 @nativeClass(null)
 export class EntityContextBase extends AbstractClass {
-    @nativeField(int32_t, 0x8)
+    @nativeField(VoidPointer.ref())
+    enttRegistry: VoidPointer; // accessed on ServerNetworkHandler::_displayGameMessage
+    @nativeField(int32_t)
     entityId: int32_t;
 
     isValid(): boolean {
@@ -467,9 +522,12 @@ export class EntityContextBase extends AbstractClass {
         return this.isValid();
     }
     _enttRegistry(): VoidPointer {
-        abstract();
+        return this.enttRegistry;
     }
 }
+
+@nativeClass(null)
+export class EntityContext extends EntityContextBase {}
 
 export class Actor extends AbstractClass {
     vftable: VoidPointer;
@@ -481,11 +539,20 @@ export class Actor extends AbstractClass {
 
     /**
      * Summon a new entity
+     * @example Actor.summonAt(player.getRegion(), player.getPosition(), ActorType.Pig)
+     * @example Actor.summonAt(player.getRegion(), player.getPosition(), ActorType.Pig, player)
      * @example Actor.summonAt(player.getRegion(), player.getPosition(), ActorType.Pig, -1, player)
      * */
-    static summonAt(region: BlockSource, pos: Vec3, type: ActorDefinitionIdentifier | ActorType, id: ActorUniqueID, summoner?: Actor): Actor;
-    static summonAt(region: BlockSource, pos: Vec3, type: ActorDefinitionIdentifier | ActorType, id: int64_as_float_t, summoner?: Actor): Actor;
-    static summonAt(region: BlockSource, pos: Vec3, type: ActorDefinitionIdentifier | ActorType, id: ActorUniqueID | int64_as_float_t, summoner?: Actor): Actor {
+    static summonAt(region: BlockSource, pos: Vec3, type: ActorDefinitionIdentifier | ActorType, summoner?: Actor): Actor;
+    static summonAt(region: BlockSource, pos: Vec3, type: ActorDefinitionIdentifier | ActorType, id?: ActorUniqueID, summoner?: Actor): Actor;
+    static summonAt(region: BlockSource, pos: Vec3, type: ActorDefinitionIdentifier | ActorType, id?: int64_as_float_t, summoner?: Actor): Actor;
+    static summonAt(
+        region: BlockSource,
+        pos: Vec3,
+        type: ActorDefinitionIdentifier | ActorType,
+        id?: ActorUniqueID | int64_as_float_t | Actor,
+        summoner?: Actor,
+    ): Actor {
         abstract();
     }
 
@@ -641,7 +708,7 @@ export class Actor extends AbstractClass {
      * @alias instanceof Mob
      */
     isMob(): this is Mob {
-        abstract();
+        return this instanceof Mob;
     }
     /**
      * @alias instanceof ServerPlayer
@@ -664,12 +731,15 @@ export class Actor extends AbstractClass {
      * @alias instanceof ItemActor
      */
     isItem(): this is ItemActor {
-        abstract();
+        return this instanceof ItemActor;
     }
     isSneaking(): boolean {
         abstract();
     }
     hasType(type: ActorType): boolean {
+        abstract();
+    }
+    isType(type: ActorType): boolean {
         abstract();
     }
     /**
@@ -770,8 +840,15 @@ export class Actor extends AbstractClass {
     }
     /**
      * Returns the BlockSource instance which the entity is ticking
+     * @alias getDimensionBlockSource
      */
     getRegion(): BlockSource {
+        abstract();
+    }
+    /**
+     * Returns the BlockSource instance which the entity is ticking
+     */
+    getDimensionBlockSource(): BlockSource {
         abstract();
     }
     getUniqueIdLow(): number {
@@ -867,8 +944,7 @@ export class Actor extends AbstractClass {
      */
     hasEffect(id: MobEffectIds): boolean {
         const effect = MobEffect.create(id);
-        const retval = this._hasEffect(effect);
-        return retval;
+        return this._hasEffect(effect);
     }
 
     protected _getEffect(mobEffect: MobEffect): MobEffectInstance | null {
@@ -879,8 +955,7 @@ export class Actor extends AbstractClass {
      */
     getEffect(id: MobEffectIds): MobEffectInstance | null {
         const effect = MobEffect.create(id);
-        const retval = this._getEffect(effect);
-        return retval;
+        return this._getEffect(effect);
     }
     removeAllEffects(): void {
         abstract();
@@ -976,8 +1051,7 @@ export class Actor extends AbstractClass {
     hurt(sourceOrCause: ActorDamageSource | ActorDamageCause, damage: number, knock: boolean, ignite: boolean): boolean {
         const isSource = sourceOrCause instanceof ActorDamageSource;
         const source = isSource ? sourceOrCause : ActorDamageSource.create(sourceOrCause);
-        const retval = this.hurt_(source, damage, knock, ignite);
-        return retval;
+        return this.hurt_(source, damage, knock, ignite);
     }
     /**
      * Changes a specific status flag of the entity
@@ -1358,11 +1432,10 @@ export class Actor extends AbstractClass {
     }
 
     /**
-     * There is Actor::isRemoved in BDS
-     * but customized for bdsx instead of hooking it.
+     * @deprecated it's meaningless. Doesn't work for decayed objects.
      */
     isRemoved(): boolean {
-        return decay.isDecayed(this);
+        return false;
     }
 
     isBaby(): boolean {
@@ -1387,6 +1460,14 @@ export class Actor extends AbstractClass {
     getScale(): float32_t {
         const entityData = this.getEntityData();
         return entityData.getFloat(ActorDataIDs.Scale);
+    }
+
+    getOwner(): Mob | null {
+        abstract();
+    }
+
+    setOwner(entityId: ActorUniqueID): void {
+        abstract();
     }
 }
 mangle.update(Actor);
@@ -1477,8 +1558,7 @@ export class Mob extends Actor {
     hurtEffects(sourceOrCause: ActorDamageCause | ActorDamageSource, damage: number, knock: boolean, ignite: boolean): boolean {
         const isSource = sourceOrCause instanceof ActorDamageSource;
         const source = isSource ? sourceOrCause : ActorDamageSource.create(sourceOrCause);
-        const retval = this.hurtEffects_(source, damage, knock, ignite);
-        return retval;
+        return this.hurtEffects_(source, damage, knock, ignite);
     }
     getArmorCoverPercentage(): float32_t {
         abstract();

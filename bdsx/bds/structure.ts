@@ -164,6 +164,8 @@ export class StructureTemplateData extends AbstractClass {
 
 @nativeClass()
 export class StructureTemplate extends AbstractClass {
+    @nativeField(VoidPointer)
+    vftable: VoidPointer;
     @nativeField(CxxString)
     name: CxxString;
     @nativeField(StructureTemplateData)
@@ -191,7 +193,7 @@ export class StructureTemplate extends AbstractClass {
         return out;
     }
     load(tag: CompoundTag | NBT.Compound): boolean {
-        abstract();
+        return this.data.load(tag);
     }
 }
 

@@ -15,6 +15,7 @@ import {
     MinecraftCommands,
 } from "./bds/command";
 import { CommandOrigin } from "./bds/commandorigin";
+import { proc } from "./bds/symbols";
 import { capi } from "./capi";
 import { CommandEnum, CommandIndexEnum, CommandRawEnum, CommandSoftEnum, CommandStringEnum } from "./commandenum";
 import { CommandParameterType } from "./commandparam";
@@ -59,6 +60,8 @@ MinecraftCommands.prototype.executeCommand = function (ctx, b) {
     }
 };
 
+const Command$collectOptionalArguments = proc["?collectOptionalArguments@Command@@MEAA_NXZ"]; // return true
+
 @nativeClass()
 export class CustomCommand extends Command {
     @nativeField(Command.VFTable)
@@ -66,6 +69,7 @@ export class CustomCommand extends Command {
 
     [NativeType.ctor](): void {
         this.self_vftable.destructor = customCommandDtor;
+        this.self_vftable.collectOptionalArguments = Command$collectOptionalArguments;
         this.self_vftable.execute = null;
         this.vftable = this.self_vftable;
     }
@@ -248,10 +252,8 @@ function softEnum(name: string, ...values: string[]): CommandSoftEnum;
 function softEnum(name: string, values: string[]): CommandSoftEnum;
 function softEnum(name: string, ...values: (string | string[])[]): CommandSoftEnum {
     const softenum = CommandSoftEnum.getInstance(name);
-    if (values.length !== 0) {
-        const first = values[0];
-        softenum.addValues(Array.isArray(first) ? first : (values as string[]));
-    }
+    const first = values[0];
+    softenum.addValues(Array.isArray(first) ? first : (values as string[]));
     return softenum;
 }
 

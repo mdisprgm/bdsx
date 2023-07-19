@@ -19,67 +19,67 @@ export class ItemComponent extends NativeClass {
         abstract();
     }
     isCooldown(): this is CooldownItemComponent {
-        abstract();
+        return this instanceof CooldownItemComponent;
     }
     isDurability(): this is DurabilityItemComponent {
-        abstract();
+        return this instanceof DurabilityItemComponent;
     }
     isDigger(): this is DiggerItemComponent {
-        abstract();
+        return this instanceof DiggerItemComponent;
     }
     isDisplayName(): this is DisplayNameItemComponent {
-        abstract();
+        return this instanceof DisplayNameItemComponent;
     }
     isDyePowder(): this is DyePowderItemComponent {
-        abstract();
+        return this instanceof DyePowderItemComponent;
     }
     isEntityPlacer(): this is EntityPlacerItemComponent {
-        abstract();
+        return this instanceof EntityPlacerItemComponent;
     }
     isFood(): this is FoodItemComponent {
-        abstract();
+        return this instanceof FoodItemComponent;
     }
     isFuel(): this is FuelItemComponent {
-        abstract();
+        return this instanceof FuelItemComponent;
     }
     isIcon(): this is IconItemComponent {
-        abstract();
+        return this instanceof IconItemComponent;
     }
     isKnockbackResistance(): this is KnockbackResistanceItemComponent {
-        abstract();
+        return this instanceof KnockbackResistanceItemComponent;
     }
     isOnUse(): this is OnUseItemComponent {
-        abstract();
+        return this instanceof OnUseItemComponent;
     }
     isPlanter(): this is PlanterItemComponent {
-        abstract();
+        return this instanceof PlanterItemComponent;
     }
     isProjectile(): this is ProjectileItemComponent {
-        abstract();
+        return this instanceof ProjectileItemComponent;
     }
     isRecord(): this is RecordItemComponent {
-        abstract();
+        return this instanceof RecordItemComponent;
     }
     isRenderOffsets(): this is RenderOffsetsItemComponent {
-        abstract();
+        return this instanceof RenderOffsetsItemComponent;
     }
     isRepairable(): this is RepairableItemComponent {
-        abstract();
+        return this instanceof RepairableItemComponent;
     }
     isShooter(): this is ShooterItemComponent {
-        abstract();
+        return this instanceof ShooterItemComponent;
     }
     isThrowable(): this is ThrowableItemComponent {
-        abstract();
+        return this instanceof ThrowableItemComponent;
     }
     isWeapon(): this is WeaponItemComponent {
-        abstract();
+        return this instanceof WeaponItemComponent;
     }
     isWearable(): this is WearableItemComponent {
-        abstract();
+        return this instanceof WearableItemComponent;
     }
     isArmor(): this is ArmorItemComponent {
-        abstract();
+        return this instanceof ArmorItemComponent;
     }
 }
 
@@ -95,18 +95,26 @@ export class DiggerItemComponent extends ItemComponent {
 
 export class DurabilityItemComponent extends ItemComponent {
     getDamageChance(int: number): number {
-        abstract();
+        const damageChangeRange = this.getUint32(0x14);
+        let unk = this.getUint32(0x18);
+        unk -= damageChangeRange;
+        unk = (unk / int + 1) | 0;
+        return unk + damageChangeRange;
     }
 }
 
 export class DisplayNameItemComponent extends ItemComponent {}
 
+/**
+ * @deprecated removed
+ */
 export class DyePowderItemComponent extends ItemComponent {}
 
 export class EntityPlacerItemComponent extends ItemComponent {
-    positionAndRotateActor(actor: Actor, vec3: Vec3, unsignedInt8: number, _vec3: Vec3, blockLegacy: BlockLegacy): void {
-        abstract();
-    }
+    // TODO: removed method, need to implement
+    // positionAndRotateActor(actor: Actor, vec3: Vec3, unsignedInt8: number, _vec3: Vec3, blockLegacy: BlockLegacy): void {
+    //     abstract();
+    // }
     setActorCustomName(actor: Actor, itemStack: ItemStack): void {
         abstract();
     }
@@ -125,6 +133,9 @@ export class FuelItemComponent extends ItemComponent {}
 
 export class IconItemComponent extends ItemComponent {}
 
+/**
+ * @deprecated removed
+ */
 export class KnockbackResistanceItemComponent extends ItemComponent {
     getProtectionValue(): number {
         abstract();
@@ -145,15 +156,21 @@ export class ProjectileItemComponent extends ItemComponent {
 }
 
 export class RecordItemComponent extends ItemComponent {
-    getAlias(): string {
-        abstract();
-    }
+    // removed
+    // getAlias(): string {
+    //     abstract();
+    // }
 }
 
 export class RenderOffsetsItemComponent extends ItemComponent {}
 
+/**
+ * TODO: implement enum
+ */
+type RepairItemResult = number;
+
 export class RepairableItemComponent extends ItemComponent {
-    handleItemRepair(itemStackBase: ItemStackBase, _itemStackBase: ItemStackBase): number {
+    handleItemRepair(itemStackBase: ItemStackBase, _itemStackBase: ItemStackBase): RepairItemResult {
         abstract();
     }
 }

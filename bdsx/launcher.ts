@@ -11,7 +11,7 @@ import { GameRules } from "./bds/gamerules";
 import { Level, ServerLevel } from "./bds/level";
 import * as nimodule from "./bds/networkidentifier";
 import { RakNet } from "./bds/raknet";
-import { RakNetInstance } from "./bds/raknetinstance";
+import { RakNetConnector } from "./bds/raknetinstance";
 import * as bd_server from "./bds/server";
 import { StructureManager } from "./bds/structure";
 import { proc } from "./bds/symbols";
@@ -25,13 +25,14 @@ import { events } from "./event";
 import { GetLine } from "./getline";
 import { makefunc } from "./makefunc";
 import { AbstractClass, nativeClass, nativeField } from "./nativeclass";
-import { bool_t, CxxString, int32_t, int64_as_float_t, NativeType, void_t } from "./nativetype";
+import { bool_t, CxxString, int32_t, int64_as_float_t, int8_t, NativeType, void_t } from "./nativetype";
 import { loadAllPlugins } from "./plugins";
 import { CxxStringWrapper } from "./pointer";
 import { procHacker } from "./prochacker";
 import { remapError } from "./source-map-support";
+import { ThisGetter } from "./thisgetter";
 import { MemoryUnlocker } from "./unlocker";
-import { DeferPromise, _tickCallback } from "./util";
+import { _tickCallback, DeferPromise } from "./util";
 import { bdsxEqualsAssert } from "./warning";
 
 declare module "colors" {
@@ -126,22 +127,22 @@ function patchForStdio(): void {
         },
         CxxString,
     );
+
     procHacker.patching(
+        // it's hard to replace with the normal hooking method because of it has the lambda call inside.
         "hook-command-output",
         "?send@CommandOutputSender@@UEAAXAEBVCommandOrigin@@AEBVCommandOutput@@@Z",
-        0x62,
+        0xb8,
         asmcode.CommandOutputSenderHook,
         Register.rdx,
         true,
         // prettier-ignore
         [
-            0x4C, 0x8B, 0x40, 0x10,       // mov r8,qword ptr ds:[rax+10]
-            0x48, 0x83, 0x78, 0x18, 0x10, // cmp qword ptr ds:[rax+18],10
-            0x72, 0x03,                   // jb bedrock_server.7FF7440A79A6
-            0x48, 0x8B, 0x00,             // mov rax,qword ptr ds:[rax]
-            0x48, 0x8B, 0xD0,             // mov rdx,rax
-            0x48, 0x8B, 0xCB,             // mov rcx,rbx
-            0xE8, null, null, null, null, // call <bedrock_server.class std::basic_ostream<char,struct std::char_traits<char> > & __ptr64 __cdecl std::_Insert_string<char,struct std::char_traits<char>,unsigned __int64>(class std::basic
+            0x41, 0xB9, 0x0C, 0x00, 0x00, 0x00, // mov r9d,C
+            0x45, 0x33, 0xC0,                   // xor r8d,r8d
+            0x41, 0x8D, 0x51, 0xF5,             // lea edx,qword ptr ds:[r9-B]
+            0x33, 0xC9,                         // xor ecx,ecx
+            0xE8, null, null, null, null,       // call <bedrock_server.void __cdecl BedrockLog::log(enum BedrockLog::LogCat
         ],
     );
 
@@ -224,7 +225,7 @@ function _launch(asyncResolve: () => void): void {
     asmcode.gameThreadFinish = makefunc.np(() => {
         closed = true;
         decay(bedrockServer.serverInstance);
-        decay(bedrockServer.networkHandler);
+        decay(bedrockServer.networkSystem);
         decay(bedrockServer.minecraft);
         decay(bedrockServer.dedicatedServer);
         decay(bedrockServer.level);
@@ -232,7 +233,7 @@ function _launch(asyncResolve: () => void): void {
         decay(bedrockServer.minecraftCommands);
         decay(bedrockServer.commandRegistry);
         decay(bedrockServer.gameRules);
-        decay(bedrockServer.raknetInstance);
+        decay(bedrockServer.connector);
         decay(bedrockServer.rakPeer);
         decay(bedrockServer.commandOutputSender);
         bedrockServer.nonOwnerPointerServerNetworkHandler.dispose();
@@ -240,7 +241,7 @@ function _launch(asyncResolve: () => void): void {
         nonOwnerPointerStructureManager!.dispose();
         decay(bedrockServer.structureManager);
     }, void_t);
-    asmcode.gameThreadInner = proc["<lambda_9c72527c89bc5df41fe482e4153a365f>::operator()"]; // caller of ServerInstance::_update
+    asmcode.gameThreadInner = proc["<lambda_2dd098141575a59f3c03b28740c54f52>::operator()"]; // caller of ServerInstance::_update
     asmcode.free = dll.ucrtbase.free.pointer;
 
     // hook game thread
@@ -248,7 +249,7 @@ function _launch(asyncResolve: () => void): void {
 
     procHacker.patching(
         "hook-game-thread",
-        "std::thread::_Invoke<std::tuple<<lambda_9c72527c89bc5df41fe482e4153a365f> >,0>", // caller of ServerInstance::_update
+        "std::thread::_Invoke<std::tuple<<lambda_2dd098141575a59f3c03b28740c54f52> >,0>", // caller of ServerInstance::_update
         6,
         asmcode.gameThreadHook, // original depended
         Register.rax,
@@ -256,18 +257,34 @@ function _launch(asyncResolve: () => void): void {
         // prettier-ignore
         [
             0x48, 0x8B, 0xD9, // mov rbx,rcx
-            0xE8, 0xFF, 0xFF, 0xFF, 0xFF, // call <bedrock_server.<lambda_58543e61c869eb14b8c48d51d3fe120b>::operator()>
+            0xE8, 0xFF, 0xFF, 0xFF, 0xFF, // call <bedrock_server.<lambda_2dd098141575a59f3c03b28740c54f52>::operator()>
             0xE8, 0xFF, 0xFF, 0xFF, 0xFF, // call <bedrock_server._Cnd_do_broadcast_at_thread_exit>
         ],
         [4, 8, 9, 13],
     );
 
-    // get server instance
-    procHacker.hookingRawWithCallOriginal(
+    const instances = {} as {
+        serverInstance: bd_server.ServerInstance;
+        networkSystem: nimodule.NetworkSystem;
+        dedicatedServer: bd_server.DedicatedServer;
+        minecraft: bd_server.Minecraft;
+    };
+    const thisGetter = new ThisGetter(instances);
+    thisGetter.register(
+        bd_server.ServerInstance,
         "??0ServerInstance@@QEAA@AEAVIMinecraftApp@@AEBV?$not_null@V?$NonOwnerPointer@VServerInstanceEventCoordinator@@@Bedrock@@@gsl@@@Z",
-        asmcode.ServerInstance_ctor_hook,
-        [Register.rcx, Register.rdx, Register.r8],
-        [],
+        "serverInstance",
+    );
+    thisGetter.register(
+        nimodule.NetworkSystem,
+        "??0ServerNetworkSystem@@QEAA@AEAVScheduler@@AEBV?$vector@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$allocator@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@2@@std@@AEBUNetworkSystemToggles@@AEBV?$NonOwnerPointer@VNetworkDebugManager@@@Bedrock@@V?$ServiceReference@VServicesManager@@@@V?$not_null@V?$NonOwnerPointer@VNetworkSessionOwner@@@Bedrock@@@gsl@@@Z",
+        "networkSystem",
+    );
+    thisGetter.register(bd_server.DedicatedServer, "??0DedicatedServer@@QEAA@XZ", "dedicatedServer");
+    thisGetter.register(
+        bd_server.Minecraft,
+        "??0Minecraft@@QEAA@AEAVIMinecraftApp@@AEAVGameCallbacks@@AEAVAllowList@@PEAVPermissionsFile@@AEBV?$not_null@V?$NonOwnerPointer@VFilePathManager@Core@@@Bedrock@@@gsl@@V?$duration@_JU?$ratio@$00$00@std@@@chrono@std@@AEAVIMinecraftEventing@@AEAVNetworkSystem@@AEAVPacketSender@@W4SubClientId@@AEAVTimer@@AEAVTimer@@AEBV?$not_null@V?$NonOwnerPointer@$$CBVIContentTierManager@@@Bedrock@@@6@PEAVServerMetrics@@@Z",
+        "minecraft",
     );
 
     patchForStdio();
@@ -291,9 +308,7 @@ function _launch(asyncResolve: () => void): void {
     // and bdsx will hijack the game thread and run it on the node thread.
     const threadHandle = dll.kernel32.CreateThread(null, 0, asmcode.wrapped_main, null, 0, asmcode.addressof_bdsMainThreadId);
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require("./bds/implements");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require("./event_impl");
 
     loadingIsFired.resolve();
@@ -302,19 +317,20 @@ function _launch(asyncResolve: () => void): void {
 
     // hook on update
     asmcode.cgateNodeLoop = cgate.nodeLoop;
-    asmcode.updateEvTargetFire = makefunc.np(
-        () => {
-            events.serverUpdate.fire();
-            _tickCallback();
-        },
-        void_t,
-        { name: "events.serverUpdate.fire" },
-    );
+    events.serverUpdate.setInstaller(() => {
+        asmcode.updateEvTargetFire = makefunc.np(
+            () => {
+                events.serverUpdate.fire();
+            },
+            void_t,
+            { name: "events.serverUpdate.fire" },
+        );
+    });
 
     procHacker.patching(
         "update-hook",
-        "<lambda_9c72527c89bc5df41fe482e4153a365f>::operator()", // caller of ServerInstance::_update
-        0x8cc,
+        "<lambda_2dd098141575a59f3c03b28740c54f52>::operator()", // caller of ServerInstance::_update
+        0x8e0,
         asmcode.updateWithSleep,
         Register.rax,
         true,
@@ -352,22 +368,18 @@ function _launch(asyncResolve: () => void): void {
                         MinecraftCommands,
                     );
                     const Level$getGameRules = procHacker.js("?getGameRules@Level@@UEAAAEAVGameRules@@XZ", GameRules, null, Level);
-                    const RakNetInstance$getPeer = procHacker.js(
-                        "?getPeer@RakNetInstance@@UEAAPEAVRakPeerInterface@RakNet@@XZ",
+                    const RakNetConnector$getPeer = procHacker.js(
+                        "?getPeer@RakNetConnector@@UEAAPEAVRakPeerInterface@RakNet@@XZ",
                         RakNet.RakPeer,
                         null,
-                        RakNetInstance,
+                        RakNetConnector,
                     );
 
                     // All pointer is found from ServerInstance::startServerThread with debug breaking.
-                    const serverInstance = asmcode.serverInstance.as(bd_server.ServerInstance);
-                    const serverInstancePtr = serverInstance as VoidPointer as StaticPointer;
-                    const dedicatedServer = serverInstancePtr.getPointerAs(bd_server.DedicatedServer, 0xa0);
-                    bdsxEqualsAssert(dedicatedServer.vftable, proc["??_7DedicatedServer@@6BIMinecraftApp@@@"], "Invalid dedicatedServer instance");
-                    const networkHandler = serverInstancePtr.getPointerAs(nimodule.NetworkHandler, 0xb0);
-                    bdsxEqualsAssert(networkHandler.vftable, proc["??_7NetworkHandler@@6BIGameConnectionInfoProvider@Social@@@"], "Invalid networkHandler instance");
-                    const minecraft = serverInstancePtr.getPointerAs(bd_server.Minecraft, 0xa8);
-                    bdsxEqualsAssert(minecraft.vftable, proc["??_7Minecraft@@6B@"], "Invalid minecraft instance");
+                    thisGetter.finish();
+                    const { serverInstance, dedicatedServer, networkSystem, minecraft } = instances;
+
+                    // TODO: delete after check
 
                     const level = Minecraft$getLevel(minecraft);
                     const nonOwnerPointerServerNetworkHandler = minecraft.getNonOwnerPointerServerNetworkHandler();
@@ -377,9 +389,18 @@ function _launch(asyncResolve: () => void): void {
                     const commandRegistry = MinecraftCommands$getRegistry(minecraftCommands);
                     const gameRules = Level$getGameRules(level);
 
-                    const raknetInstance = (networkHandler as any as StaticPointer).getPointer(0x50).getPointerAs(RakNetInstance, 8);
-                    bdsxEqualsAssert(raknetInstance.vftable, proc["??_7RakNetInstance@@6BConnector@@@"], "Invalid raknetInstance");
-                    const rakPeer = RakNetInstance$getPeer(raknetInstance);
+                    const NetworkSystem$getConnector = procHacker.js(
+                        "?getRemoteConnector@NetworkSystem@@QEAA?AV?$not_null@V?$NonOwnerPointer@VRemoteConnector@@@Bedrock@@@gsl@@XZ",
+                        Bedrock.NonOwnerPointer.make(RakNetConnector),
+                        { structureReturn: true, this: nimodule.NetworkSystem },
+                    );
+                    const nonOwnerPointerConnector: Bedrock.NonOwnerPointer<RakNetConnector> = NetworkSystem$getConnector.call(networkSystem);
+                    const connector = nonOwnerPointerConnector.get()!.subAs(RakNetConnector, 48); // adjust
+
+                    bdsxEqualsAssert(connector.vftable, proc["??_7RakNetConnector@@6BConnector@@@"], "Invalid connector");
+                    const rakPeer = RakNetConnector$getPeer(connector);
+                    nonOwnerPointerConnector.dispose();
+
                     bdsxEqualsAssert(rakPeer.vftable, proc["??_7RakPeer@RakNet@@6BRakPeerInterface@1@@"], "Invalid rakPeer");
                     const commandOutputSender = (minecraftCommands as any as StaticPointer).getPointerAs(CommandOutputSender, 0x8);
                     const serverNetworkHandler = nonOwnerPointerServerNetworkHandler.get()!.subAs(nimodule.ServerNetworkHandler, 0x10); // XXX: unknown state. cut corners.
@@ -399,7 +420,8 @@ function _launch(asyncResolve: () => void): void {
 
                     Object.defineProperties(bedrockServer, {
                         serverInstance: { value: serverInstance },
-                        networkHandler: { value: networkHandler },
+                        networkHandler: { value: networkSystem },
+                        networkSystem: { value: networkSystem },
                         minecraft: { value: minecraft },
                         dedicatedServer: { value: dedicatedServer },
                         level: { value: level },
@@ -410,7 +432,8 @@ function _launch(asyncResolve: () => void): void {
                         minecraftCommands: { value: minecraftCommands },
                         commandRegistry: { value: commandRegistry },
                         gameRules: { value: gameRules },
-                        raknetInstance: { value: raknetInstance },
+                        raknetInstance: { value: connector },
+                        connector: { value: connector },
                         rakPeer: { value: rakPeer },
                         commandOutputSender: { value: commandOutputSender },
                         structureManager: { value: structureManager },
@@ -419,8 +442,8 @@ function _launch(asyncResolve: () => void): void {
                     Object.defineProperty(bd_server, "serverInstance", {
                         value: serverInstance,
                     });
-                    Object.defineProperty(nimodule, "networkHandler", {
-                        value: networkHandler,
+                    Object.defineProperty(nimodule, "networkSystem", {
+                        value: networkSystem,
                     });
 
                     openIsFired.resolve();
@@ -435,7 +458,7 @@ function _launch(asyncResolve: () => void): void {
                 }
             },
             void_t,
-            { name: "hook of ScriptEngine::startScriptLoading" },
+            { name: "hook of ScriptEngine::startScriptLoading", onlyOnce: true },
             VoidPointer,
         ),
         [Register.rcx, Register.rdx],
@@ -463,7 +486,7 @@ function _launch(asyncResolve: () => void): void {
         VoidPointer,
         EventRef$ServerInstanceGameplayEvent$Void,
     )((_this, ev) => {
-        if (ev.type === GameplayEvent.Stop) {
+        if (!ev.restart) {
             events.serverStop.fire();
             _tickCallback();
         }
@@ -501,7 +524,9 @@ export namespace bedrockServer {
     // eslint-disable-next-line prefer-const
     export let serverInstance: bd_server.ServerInstance = abstractobject;
     // eslint-disable-next-line prefer-const
-    export let networkHandler: nimodule.NetworkHandler = abstractobject;
+    export let networkHandler: nimodule.NetworkSystem = abstractobject;
+    // eslint-disable-next-line prefer-const
+    export let networkSystem: nimodule.NetworkSystem = abstractobject;
     // eslint-disable-next-line prefer-const
     export let minecraft: bd_server.Minecraft = abstractobject;
     // eslint-disable-next-line prefer-const
@@ -516,8 +541,13 @@ export namespace bedrockServer {
     export let commandRegistry: CommandRegistry = abstractobject;
     // eslint-disable-next-line prefer-const
     export let gameRules: GameRules = abstractobject;
+    /**
+     * @alias bedrockServer.connector
+     */
     // eslint-disable-next-line prefer-const
-    export let raknetInstance: RakNetInstance = abstractobject;
+    export let raknetInstance: RakNetConnector = abstractobject;
+    // eslint-disable-next-line prefer-const
+    export let connector: RakNetConnector = abstractobject;
     // eslint-disable-next-line prefer-const
     export let rakPeer: RakNet.RakPeer = abstractobject;
     // eslint-disable-next-line prefer-const
@@ -531,7 +561,7 @@ export namespace bedrockServer {
         value: abstractobject,
         writable: true,
     });
-    Object.defineProperty(nimodule, "networkHandler", {
+    Object.defineProperty(nimodule, "networkSystem", {
         value: abstractobject,
         writable: true,
     });
@@ -705,16 +735,8 @@ export namespace bedrockServer {
 /**
  * temporal name
  */
-enum GameplayEvent {
-    Stop,
-    Restart,
-}
-
-/**
- * temporal name
- */
 @nativeClass()
 class EventRef$ServerInstanceGameplayEvent$Void extends AbstractClass {
-    @nativeField(int32_t)
-    type: GameplayEvent;
+    @nativeField(int8_t, 0x18)
+    restart: int8_t; // assumed, inaccurate
 }

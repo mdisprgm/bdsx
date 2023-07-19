@@ -3,10 +3,10 @@ import { abstract } from "../common";
 import { StaticPointer, VoidPointer } from "../core";
 import { dll } from "../dll";
 import { events } from "../event";
-import { Hashable, HashSet } from "../hashset";
+import { HashSet, Hashable } from "../hashset";
 import { makefunc } from "../makefunc";
-import { AbstractClass, nativeClass, NativeClass, nativeField, NativeStruct } from "../nativeclass";
-import { bin64_t, CxxString, int32_t, NativeType, void_t } from "../nativetype";
+import { AbstractClass, NativeClass, NativeStruct, nativeClass, nativeField } from "../nativeclass";
+import { CxxString, NativeType, bin64_t, bool_t, int32_t, void_t } from "../nativetype";
 import { CxxStringWrapper } from "../pointer";
 import { procHacker } from "../prochacker";
 import { remapAndPrintError } from "../source-map-support";
@@ -14,15 +14,15 @@ import { ConnectionRequest } from "./connreq";
 import type { Packet } from "./packet";
 import type { ServerPlayer } from "./player";
 import { RakNet } from "./raknet";
-import { RakNetInstance } from "./raknetinstance";
+import { RakNetConnector } from "./raknetinstance";
 
 // TODO: fill
 enum SubClientId {}
 
-export class NetworkHandler extends AbstractClass {
+export class NetworkSystem extends AbstractClass {
     vftable: VoidPointer;
-    /** @deprecated use bedrockServer.raknetInstance */
-    instance: RakNetInstance;
+    /** @deprecated use bedrockServer.connector */
+    instance: RakNetConnector;
 
     send(ni: NetworkIdentifier, packet: Packet, senderSubClientId: number): void;
     send(ni: NetworkIdentifier, packet: Packet, senderSubClientId: SubClientId): void;
@@ -39,12 +39,17 @@ export class NetworkHandler extends AbstractClass {
         abstract();
     }
 }
+export import NetworkHandler = NetworkSystem;
 
 export class NetworkConnection extends AbstractClass {
     networkIdentifier: NetworkIdentifier;
+
+    disconnect(): void {
+        abstract();
+    }
 }
 
-export namespace NetworkHandler {
+export namespace NetworkSystem {
     /** @deprecated renamed to NetworkConnection */
     export const Connection = NetworkConnection;
     /** @deprecated renamed to NetworkConnection */
@@ -58,7 +63,7 @@ class ServerNetworkHandler$Client extends AbstractClass {}
 export class ServerNetworkHandler extends AbstractClass {
     @nativeField(VoidPointer)
     vftable: VoidPointer;
-    @nativeField(CxxString, 0x288) // accessed in ServerNetworkHandler::allowIncomingConnections
+    @nativeField(CxxString, 0x288) // serverName, accessed in ServerNetworkHandler::allowIncomingConnections
     readonly motd: CxxString;
     @nativeField(int32_t, 0x300) // accessed in ServerNetworkHandler::setMaxNumPlayers
     readonly maxPlayers: int32_t;
@@ -78,7 +83,7 @@ export class ServerNetworkHandler extends AbstractClass {
     setMaxPlayers(count: number): void {
         this.setMaxNumPlayers(count);
     }
-    allowIncomingConnections(motd: string, b: boolean): void {
+    allowIncomingConnections(motd: string, shouldAnnounce: boolean): void {
         abstract();
     }
     updateServerAnnouncement(): void {
@@ -157,13 +162,13 @@ NetworkIdentifier.setResolver(ptr => {
     identifiers.add(ni);
     return ni;
 });
-/** @deprecated use bedrockServer.networkHandler */
-export let networkHandler: NetworkHandler;
+/** @deprecated use bedrockServer.networkSystem */
+export let networkSystem: NetworkSystem;
 
 procHacker.hookingRawWithCallOriginal(
-    "?onConnectionClosed@NetworkHandler@@EEAAXAEBVNetworkIdentifier@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@Z",
+    "?onConnectionClosed@NetworkSystem@@EEAAXAEBVNetworkIdentifier@@W4DisconnectFailReason@Connection@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@_N@Z",
     makefunc.np(
-        (handler, ni, msg) => {
+        (handler, ni, reason, msg, b) => {
             try {
                 events.networkDisconnected.fire(ni);
             } catch (err) {
@@ -177,9 +182,11 @@ procHacker.hookingRawWithCallOriginal(
         },
         void_t,
         { name: "hook of NetworkIdentifier dtor" },
-        NetworkHandler,
+        NetworkSystem,
         NetworkIdentifier,
+        int32_t,
         CxxStringWrapper,
+        bool_t,
     ),
     [Register.rcx, Register.rdx, Register.r8, Register.r9],
     [],

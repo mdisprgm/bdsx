@@ -138,7 +138,7 @@ export enum MinecraftPacketIds { // int32_t
     UpdateSoftEnum = 0x72,
     NetworkStackLatency = 0x73,
     // BlockPalette = 0x74, // DEPRECATED
-    ScriptCustomEvent = 0x75,
+    // ScriptCustomEvent = 0x75, // removed
     SpawnParticleEffect = 0x76,
     AvailableActorIdentifiers = 0x77,
     LevelSoundEventV2 = 0x78,
@@ -222,5 +222,26 @@ export enum MinecraftPacketIds { // int32_t
     GameTestRequest = 0xc2,
     GameTestResults = 0xc3,
     UpdateClientInputLocks = 0xc4,
+    /** @deprecated skip Packet ends */
+    // ClientCheatAbilityPacket = 0xc5, // removed
+    // ClientCheatAbility = 0xc5, // removed
+    /** @deprecated skip Packet ends */
+    CameraPresetsPacket = 0xc6,
+    CameraPresets = 0xc6,
+    /** @deprecated skip Packet ends */
+    UnlockedRecipesPacket = 0xc7,
+    UnlockedRecipes = 0xc7,
+    /** @deprecated skip Packet ends */
+    CameraInstructionPacket = 0x12c,
+    CameraInstruction = 0x12c,
+    /** @deprecated skip Packet ends */
+    CompressedBiomeDefinitionListPacket = 0x12d,
+    CompressedBiomeDefinitionList = 0x12d,
+    /** @deprecated skip Packet ends */
+    TrimDataPacket = 0x12e,
+    TrimData = 0x12e,
+    /** @deprecated skip Packet ends */
+    OpenSignPacket = 0x12f,
+    OpenSign = 0x12f,
 }
 (MinecraftPacketIds as any).__proto__ = null;

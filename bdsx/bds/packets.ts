@@ -17,6 +17,7 @@ import {
     NativeType,
     uint16_t,
     uint32_t,
+    uint64_as_float_t,
     uint8_t,
 } from "../nativetype";
 import { ActorDefinitionIdentifier, ActorLink, ActorRuntimeID, ActorUniqueID } from "./actor";
@@ -24,8 +25,11 @@ import { AttributeInstanceHandle } from "./attribute";
 import { BlockPos, ChunkPos, Vec2, Vec3 } from "./blockpos";
 import { ConnectionRequest, JsonValue } from "./connreq";
 import { CxxOptional } from "./cxxoptional";
+import type { Form } from "./form";
 import { HashedString } from "./hashedstring";
 import { ComplexInventoryTransaction, ContainerId, ContainerType, ItemStackNetIdVariant, NetworkItemStackDescriptor } from "./inventory";
+import { Difficulty } from "./level";
+import { MolangVariableMap } from "./molangvariablemap";
 import { CompoundTag } from "./nbt";
 import { Packet } from "./packet";
 import type { GameType, Player } from "./player";
@@ -228,6 +232,16 @@ export class SetTimePacket extends Packet {
 export class LevelSettings extends MantleClass {
     @nativeField(int64_as_float_t)
     seed: int64_as_float_t;
+    @nativeField(int32_t, 0x8)
+    gameType: GameType;
+    @nativeField(int32_t, 0xc)
+    difficulty: Difficulty;
+    @nativeField(bool_t, 0x78)
+    commandsEnabled: bool_t;
+    @nativeField(bool_t)
+    texturePacksRequired: bool_t;
+    @nativeField(bool_t, 0x8c)
+    customSkinsDisabled: bool_t;
 }
 
 @nativeClass(null)
@@ -861,7 +875,7 @@ export class SetCommandsEnabledPacket extends Packet {
 @nativeClass(null)
 export class SetDifficultyPacket extends Packet {
     @nativeField(uint32_t)
-    difficulty: uint32_t;
+    difficulty: Difficulty;
 }
 
 @nativeClass(null)
@@ -1046,7 +1060,17 @@ export namespace BossEventPacket {
 
 @nativeClass(null)
 export class ShowCreditsPacket extends Packet {
-    // unknown
+    @nativeField(ActorRuntimeID)
+    runtimeId: ActorRuntimeID;
+    @nativeField(uint32_t)
+    state: ShowCreditsPacket.CreditsState;
+}
+
+export namespace ShowCreditsPacket {
+    export enum CreditsState {
+        StartCredits,
+        EndCredits,
+    }
 }
 
 @nativeClass()
@@ -1067,8 +1091,8 @@ class AvailableCommandsOverloadData extends NativeClass {
     readonly parameters: CxxVector<AvailableCommandsParamData>;
 }
 
-@nativeClass(0x68)
-class AvailableCommandsCommandData extends NativeClass {
+@nativeClass(0x80)
+class AvailableCommandsCommandData extends AbstractClass {
     @nativeField(CxxString)
     name: CxxString;
     @nativeField(CxxString)
@@ -1083,8 +1107,12 @@ class AvailableCommandsCommandData extends NativeClass {
     })
     readonly parameters: CxxVector<CxxVector<CxxString>>;
     @nativeField(CxxVector.make(AvailableCommandsOverloadData))
-    readonly overloads: CxxVector<AvailableCommandsOverloadData>;
-    @nativeField(int32_t) // 60
+    readonly overloads: CxxVector<AvailableCommandsOverloadData>; // 48
+
+    // @nativeField(CxxVector.make(unknown))
+    // readonly unknown vector: CxxVector<unknown>; // 60
+
+    @nativeField(int32_t, 0x78) // 78
     aliases: int32_t;
 }
 
@@ -1099,7 +1127,10 @@ export class AvailableCommandsPacket extends Packet {
     readonly postfixes: CxxVector<CxxString>;
     @nativeField(CxxVector.make(AvailableCommandsEnumData))
     readonly enums: CxxVector<AvailableCommandsEnumData>;
-    @nativeField(CxxVector.make(AvailableCommandsCommandData))
+
+    // unknown vectors
+
+    @nativeField(CxxVector.make(AvailableCommandsCommandData), 0xa8)
     readonly commands: CxxVector<AvailableCommandsCommandData>;
 }
 export namespace AvailableCommandsPacket {
@@ -1133,13 +1164,13 @@ export class UpdateTradePacket extends Packet {
     containerType: ContainerType;
     @nativeField(CxxString)
     displayName: CxxString;
-    @nativeField(uint8_t, 0x5c)
-    traderTier: uint8_t;
-    @nativeField(ActorUniqueID, 0x60)
+    @nativeField(int32_t, 0x5c)
+    traderTier: int32_t;
+    @nativeField(ActorUniqueID)
     entityId: ActorUniqueID;
-    @nativeField(ActorUniqueID, 0x68)
+    @nativeField(ActorUniqueID)
     lastTradingPlayer: ActorUniqueID;
-    @nativeField(CompoundTag, 0x70)
+    @nativeField(CompoundTag)
     data: CompoundTag;
 }
 
@@ -1236,11 +1267,13 @@ export class StructureBlockUpdatePacket extends Packet {
     // unknown
 }
 
+/** @deprecated This packet only works on partnered servers.*/
 @nativeClass(null)
 export class ShowStoreOfferPacket extends Packet {
     // unknown
 }
 
+/** @deprecated This packet only works on partnered servers.*/
 @nativeClass(null)
 export class PurchaseReceiptPacket extends Packet {
     // unknown
@@ -1307,9 +1340,41 @@ export namespace BookEditPacket {
 
 @nativeClass(null)
 export class NpcRequestPacket extends Packet {
-    // unknown
+    @nativeField(ActorRuntimeID)
+    runtimeId: ActorRuntimeID;
+    @nativeField(uint8_t)
+    requestType: NpcRequestPacket.RequestType;
+    @nativeField(CxxString)
+    command: CxxString;
+    @nativeField(uint8_t)
+    actionType: NpcRequestPacket.ActionType;
+    @nativeField(CxxString)
+    sceneName: CxxString;
 }
 
+export namespace NpcRequestPacket {
+    export enum RequestType {
+        SetActions,
+        ExecuteAction,
+        ExecuteClosingCommands,
+        SetName,
+        SetAction,
+        SetSkin,
+        SetInteractionText,
+    }
+    export enum ActionType {
+        SetActions,
+        ExecuteAction,
+        ExecuteClosingCommands,
+        SetName,
+        SetAction,
+        SetSkin,
+        SetInteractionText,
+        ExecuteOpeningCommands,
+    }
+}
+
+/** @deprecated Only usable in Education Edition, Bedrock will not display the photo. */
 @nativeClass(null)
 export class PhotoTransferPacket extends Packet {
     // unknown
@@ -1332,16 +1397,15 @@ export type ShowModalFormPacket = ModalFormRequestPacket;
 export class ModalFormResponsePacket extends Packet {
     @nativeField(uint32_t)
     id: uint32_t;
-
     @nativeField(CxxOptional.make(JsonValue))
     response: CxxOptional<JsonValue>;
-    // @nativeField(CxxOptional.make(uint8_t))
-    // unknown:CxxOptional<uint8_t>;
+    @nativeField(CxxOptional.make(uint8_t))
+    cancelationReason: CxxOptional<Form.CancelationReason>;
 }
 
 @nativeClass(null)
 export class ServerSettingsRequestPacket extends Packet {
-    // unknown
+    // no data
 }
 
 @nativeClass(null)
@@ -1354,7 +1418,8 @@ export class ServerSettingsResponsePacket extends Packet {
 
 @nativeClass(null)
 export class ShowProfilePacket extends Packet {
-    // unknown
+    @nativeField(CxxString)
+    xuid: CxxString;
 }
 
 @nativeClass(null)
@@ -1461,6 +1526,7 @@ export class NetworkStackLatencyPacket extends Packet {
     // unknown
 }
 
+/** @deprecated removed */
 @nativeClass(null)
 export class ScriptCustomEventPacket extends Packet {
     // unknown
@@ -1476,6 +1542,8 @@ export class SpawnParticleEffectPacket extends Packet {
     readonly pos: Vec3;
     @nativeField(CxxString)
     particleName: CxxString;
+    @nativeField(MolangVariableMap)
+    molangVariablesJson: MolangVariableMap;
 }
 
 /** @deprecated use SpawnParticleEffectPacket, follow real class name */
@@ -1488,6 +1556,7 @@ export class AvailableActorIdentifiersPacket extends Packet {
     // unknown
 }
 
+/** @deprecated Unused packet, use LevelSoundEventPacket instead. */
 @nativeClass(null)
 export class LevelSoundEventPacketV2 extends Packet {
     // unknown
@@ -1495,12 +1564,17 @@ export class LevelSoundEventPacketV2 extends Packet {
 
 @nativeClass(null)
 export class NetworkChunkPublisherUpdatePacket extends Packet {
-    // unknown
+    @nativeField(BlockPos)
+    position: BlockPos;
+    /** @warning This field may not be the radius, this is just a guess. */
+    @nativeField(uint8_t)
+    radius: uint8_t;
 }
 
 @nativeClass(null)
 export class BiomeDefinitionList extends Packet {
-    // unknown
+    @nativeField(CompoundTag)
+    nbt: CompoundTag;
 }
 
 @nativeClass(null)
@@ -1526,7 +1600,14 @@ export class LevelEventGenericPacket extends Packet {
 
 @nativeClass(null)
 export class LecternUpdatePacket extends Packet {
-    // unknown
+    @nativeField(uint8_t)
+    page: uint8_t;
+    @nativeField(uint8_t)
+    pageCount: uint8_t;
+    @nativeField(Vec3)
+    position: Vec3;
+    @nativeField(bool_t)
+    dropBook: bool_t;
 }
 
 @nativeClass(null)
@@ -1536,7 +1617,8 @@ export class RemoveEntityPacket extends Packet {
 
 @nativeClass(null)
 export class ClientCacheStatusPacket extends Packet {
-    // unknown
+    @nativeField(bool_t)
+    enabled: bool_t;
 }
 
 @nativeClass(null)
@@ -1547,7 +1629,10 @@ export class OnScreenTextureAnimationPacket extends Packet {
 
 @nativeClass(null)
 export class MapCreateLockedCopy extends Packet {
-    // unknown
+    @nativeField(uint64_as_float_t)
+    original: uint64_as_float_t;
+    @nativeField(uint64_as_float_t)
+    new: uint64_as_float_t;
 }
 
 @nativeClass(null)
@@ -1582,9 +1667,22 @@ export class EducationSettingsPacket extends Packet {
 
 @nativeClass(null)
 export class EmotePacket extends Packet {
-    // unknown
+    @nativeField(ActorRuntimeID)
+    runtimeId: ActorRuntimeID;
+    @nativeField(CxxString)
+    emoteId: CxxString;
+    @nativeField(uint8_t)
+    flag: EmotePacket.Flags;
 }
 
+export namespace EmotePacket {
+    export enum Flags {
+        ServerSide = 1,
+        MuteChat,
+    }
+}
+
+/** @deprecated Minecraft Education Edition exclusive */
 @nativeClass(null)
 export class MultiplayerSettingsPacket extends Packet {
     // unknown
@@ -1743,7 +1841,7 @@ export enum ItemStackRequestActionType {
     CraftResults_DEPRECATEDASKTYLAING,
 }
 
-@nativeClass(null)
+@nativeClass()
 export class ItemStackRequestAction extends AbstractClass {
     @nativeField(VoidPointer)
     vftable: VoidPointer;
@@ -1790,6 +1888,9 @@ export class ItemStackRequestData extends AbstractClass {
         abstract();
     }
     getActions(): CxxVector<ItemStackRequestAction> {
+        abstract();
+    }
+    tryFindAction(action: ItemStackRequestActionType): ItemStackRequestAction | null {
         abstract();
     }
 }
@@ -2153,6 +2254,42 @@ export class UpdateClientInputLocksPacket extends Packet {
     // unknown
 }
 
+/** @deprecated removed */
+@nativeClass(null)
+export class ClientCheatAbilityPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class CameraPresetsPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class UnlockedRecipesPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class CameraInstructionPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class CompressedBiomeDefinitionListPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class TrimDataPacket extends Packet {
+    // unknown
+}
+
+@nativeClass(null)
+export class OpenSignPacket extends Packet {
+    // unknown
+}
+
 export const PacketIdToType = {
     0x01: LoginPacket,
     0x02: PlayStatusPacket,
@@ -2270,7 +2407,7 @@ export const PacketIdToType = {
     0x72: UpdateSoftEnumPacket,
     0x73: NetworkStackLatencyPacket,
     // 0x74: BlockPalette, // DEPRECATED
-    0x75: ScriptCustomEventPacket,
+    // 0x75: ScriptCustomEventPacket, // removed
     0x76: SpawnParticleEffectPacket,
     0x77: AvailableActorIdentifiersPacket,
     0x78: LevelSoundEventPacketV2,
@@ -2348,9 +2485,16 @@ export const PacketIdToType = {
     0xc2: GameTestRequestPacket,
     0xc3: GameTestResultsPacket,
     0xc4: UpdateClientInputLocksPacket,
+    // 0xc5: ClientCheatAbilityPacket, // removed
+    0xc6: CameraPresetsPacket,
+    0xc7: UnlockedRecipesPacket,
+    0x12c: CameraInstructionPacket,
+    0x12d: CompressedBiomeDefinitionListPacket,
+    0x12e: TrimDataPacket,
+    0x12f: OpenSignPacket,
 };
 export type PacketIdToType = {
-    [key in keyof typeof PacketIdToType]: InstanceType<typeof PacketIdToType[key]>;
+    [key in keyof typeof PacketIdToType]: InstanceType<(typeof PacketIdToType)[key]>;
 };
 
 for (const [packetId, type] of Object.entries(PacketIdToType)) {
