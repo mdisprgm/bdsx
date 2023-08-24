@@ -2616,6 +2616,17 @@ Block.prototype.getDirectSignal = procHacker.js(
 Block.prototype.isSignalSource = procHacker.js("?isSignalSource@Block@@QEBA_NXZ", bool_t, { this: Block });
 Block.prototype.getDestroySpeed = procHacker.js("?getDestroySpeed@Block@@QEBAMXZ", float32_t, { this: Block });
 
+const BlockHasTag = procHacker.js("?hasTag@Block@@QEBA_NAEBVHashedString@@@Z", bool_t, null, Block, HashedString);
+Block.prototype.hasTag = function (string) {
+    if (string instanceof HashedString) {
+        return BlockHasTag(this, string);
+    }
+    const hashed = HashedString.constructWith(string);
+    const result = BlockHasTag(this, hashed);
+    hashed.destruct();
+    return result;
+};
+
 // BDS calls BlockSource::setBlock (this, exactly same overload) when player moves to TheEnd Dimension, to secure the obsidian platform.
 (BlockSource.prototype as any)._setBlock = procHacker.js(
     "?setBlock@BlockSource@@QEAA_NHHHAEBVBlock@@HPEAVActor@@@Z",

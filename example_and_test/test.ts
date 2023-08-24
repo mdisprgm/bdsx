@@ -42,7 +42,7 @@ import { command, CommandFieldOptions } from "bdsx/command";
 import { CommandParameterType } from "bdsx/commandparam";
 import { CommandResultType } from "bdsx/commandresult";
 import { AttributeName, CANCEL } from "bdsx/common";
-import { NativePointer, StaticPointer } from "bdsx/core";
+import { NativePointer } from "bdsx/core";
 import { CxxMap } from "bdsx/cxxmap";
 import { CxxVector, CxxVectorToArray } from "bdsx/cxxvector";
 import { disasm } from "bdsx/disassembler";
@@ -1371,6 +1371,36 @@ Tester.concurrency(
             this.equals(Block.create("minecraft:_no_block_"), null, "minecraft:_no_block_ is not null");
             this.equals(Block.create("dirt")!, Block.create("dirt"), "dirt is not dirt");
             this.notEquals(Block.create("planks", 0)!, Block.create("planks", 1), "planks#0 is planks#1");
+
+            this.equals(proc["?Acacia@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "acacia");
+            this.equals(proc["?Birch@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "birch");
+            this.equals(proc["?Crop@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "minecraft:crop");
+            this.equals(proc["?DarkOak@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "dark_oak");
+            this.equals(proc["?DiamondDiggable@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "diamond_pick_diggable");
+            this.equals(proc["?Dirt@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "dirt");
+            this.equals(proc["?FertilizeArea@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "fertilize_area");
+            this.equals(proc["?GoldDiggable@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "gold_pick_diggable");
+            this.equals(proc["?Grass@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "grass");
+            this.equals(proc["?Gravel@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "gravel");
+            this.equals(proc["?IronDiggable@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "iron_pick_diggable");
+            this.equals(proc["?Jungle@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "jungle");
+            this.equals(proc["?Log@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "log");
+            this.equals(proc["?Metal@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "metal");
+            this.equals(proc["?MobSpawner@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "mob_spawner");
+            this.equals(proc["?NotFeatureReplaceable@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "not_feature_replaceable");
+            this.equals(proc["?Oak@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "oak");
+            this.equals(proc["?Plant@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "plant");
+            this.equals(proc["?Pumpkin@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "pumpkin");
+            this.equals(proc["?Rail@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "rail");
+            this.equals(proc["?Sand@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "sand");
+            this.equals(proc["?Snow@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "snow");
+            this.equals(proc["?Spruce@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "spruce");
+            this.equals(proc["?Stone@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "stone");
+            this.equals(proc["?StoneDiggable@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "stone_pick_diggable");
+            this.equals(proc["?TextSign@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "text_sign");
+            this.equals(proc["?Water@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "water");
+            this.equals(proc["?Wood@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "wood");
+            this.equals(proc["?WoodDiggable@VanillaBlockTags@@3VHashedString@@B"].as(HashedString).str, "wood_pick_diggable");
         },
 
         blockPos() {

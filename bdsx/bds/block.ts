@@ -204,6 +204,50 @@ export class Block extends NativeClass {
     getDestroySpeed(): number {
         abstract();
     }
+    /**
+     * also you can hook native HashedString instance
+     * ex) const VanillaBlockTags$Crop = proc[?Crop@VanillaBlockTags@@3VHashedString@@B].as(HashedString);
+     */
+    hasTag(str: VanillaBlockTagsList): boolean;
+    hasTag(hashedStr: HashedString): boolean;
+    hasTag(str: string | HashedString): boolean {
+        abstract();
+    }
+}
+type VanillaBlockTagsList = keyof typeof AvailableVanillaBlockTags;
+/**
+ * internal data for declare type, as of 1.20.15
+ */
+enum AvailableVanillaBlockTags {
+    acacia,
+    birch,
+    dark_oak,
+    diamond_pick_diggable,
+    dirt,
+    fertilize_area,
+    gold_pick_diggable,
+    grass,
+    gravel,
+    iron_pick_diggable,
+    jungle,
+    log,
+    metal,
+    "minecraft:crop",
+    mob_spawner,
+    not_feature_replaceable,
+    oak,
+    plant,
+    pumpkin,
+    rail,
+    sand,
+    snow,
+    spruce,
+    stone,
+    stone_pick_diggable,
+    text_sign,
+    water,
+    wood,
+    wood_pick_diggable,
 }
 
 // Neighbors causes block updates around
