@@ -275,15 +275,11 @@ function _launch(asyncResolve: () => void): void {
         "??0ServerInstance@@QEAA@AEAVIMinecraftApp@@AEBV?$not_null@V?$NonOwnerPointer@VServerInstanceEventCoordinator@@@Bedrock@@@gsl@@@Z",
         "serverInstance",
     );
-    thisGetter.register(
-        nimodule.NetworkSystem,
-        "??0ServerNetworkSystem@@QEAA@AEAVScheduler@@AEBV?$vector@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$allocator@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@2@@std@@AEBUNetworkSystemToggles@@AEBV?$NonOwnerPointer@VNetworkDebugManager@@@Bedrock@@V?$ServiceReference@VServicesManager@@@@V?$not_null@V?$NonOwnerPointer@VNetworkSessionOwner@@@Bedrock@@@gsl@@@Z",
-        "networkSystem",
-    );
+    thisGetter.register(nimodule.NetworkSystem, "??0NetworkSystem@@IEAA@$$QEAUDependencies@0@@Z", "networkSystem");
     thisGetter.register(bd_server.DedicatedServer, "??0DedicatedServer@@QEAA@XZ", "dedicatedServer");
     thisGetter.register(
         bd_server.Minecraft,
-        "??0Minecraft@@QEAA@AEAVIMinecraftApp@@AEAVGameCallbacks@@AEAVAllowList@@PEAVPermissionsFile@@AEBV?$not_null@V?$NonOwnerPointer@VFilePathManager@Core@@@Bedrock@@@gsl@@V?$duration@_JU?$ratio@$00$00@std@@@chrono@std@@AEAVIMinecraftEventing@@AEAVNetworkSystem@@AEAVPacketSender@@W4SubClientId@@AEAVTimer@@AEAVTimer@@AEBV?$not_null@V?$NonOwnerPointer@$$CBVIContentTierManager@@@Bedrock@@@6@PEAVServerMetrics@@@Z",
+        "??0Minecraft@@QEAA@AEAVIMinecraftApp@@AEAVGameCallbacks@@AEAVAllowList@@PEAVPermissionsFile@@AEBV?$not_null@V?$NonOwnerPointer@VFilePathManager@Core@@@Bedrock@@@gsl@@V?$duration@_JU?$ratio@$00$00@std@@@chrono@std@@AEAVIMinecraftEventing@@VClientOrServerNetworkSystemRef@@AEAVPacketSender@@W4SubClientId@@AEAVTimer@@AEAVTimer@@AEBV?$not_null@V?$NonOwnerPointer@$$CBVIContentTierManager@@@Bedrock@@@6@PEAVServerMetrics@@@Z",
         "minecraft",
     );
 
@@ -333,7 +329,7 @@ function _launch(asyncResolve: () => void): void {
     procHacker.patching(
         "update-hook",
         "<lambda_bad1ae3ebb6f5574a4da91bc00ae0aaf>::operator()", // caller of ServerInstance::_update
-        0x912,
+        0x93e,
         asmcode.updateWithSleep,
         Register.rax,
         true,
@@ -341,7 +337,7 @@ function _launch(asyncResolve: () => void): void {
         [
             0x48, 0x2B, 0xC8,                         // sub rcx,rax
             0x48, 0x81, 0xF9, 0x88, 0x13, 0x00, 0x00, // cmp rcx,1388
-            0x7C, 0x0B,                               // jl bedrock_server.7FF743BA7B50
+            0x7C, 0x0B,                               // jl bedrock_server.7FF694B8D515
             0x48, 0x8D, 0x4C, 0x24, 0x20,             // lea rcx,qword ptr ss:[rsp+20]
             0xE8, null, null, null, null,             // call <bedrock_server.void __cdecl std::this_thread::sleep_until<struct std::chrono::steady_clock,class std::chrono::duration<__int64,struct std::ratio<1,1000000000> > >(class std::chrono::ti
             0x90,                                     // nop

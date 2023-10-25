@@ -274,8 +274,14 @@ export class LevelData extends NativeClass {
 export class ActorFactory extends NativeClass {}
 export class BlockPalette extends NativeClass {
     /** @param name only accepts format like "minecraft:wool" */
-    getBlockLegacy(name: BlockId): BlockLegacy;
-    getBlockLegacy(name: string): BlockLegacy;
+    static getBlockLegacy(name: BlockId): BlockLegacy;
+    static getBlockLegacy(name: string): BlockLegacy;
+    static getBlockLegacy(name: BlockId | string): BlockLegacy {
+        abstract();
+    }
+    /**
+     * @deprecated moved to static
+     */
     getBlockLegacy(name: BlockId | string): BlockLegacy {
         abstract();
     }

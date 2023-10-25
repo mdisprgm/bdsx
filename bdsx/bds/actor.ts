@@ -1515,6 +1515,7 @@ export enum ActorDataIDs /** : unsigned short */ {
     Scale = 0x26, // used as float, in Actor::setSize
     Width = 0x35, // used as float, in Actor::setSize
     Height = 0x36, // used as float, in Actor::setSize
+    ScoreTag = 0x54, // used as std::string, in Actor::setScoreTag
 }
 
 @nativeClass()
