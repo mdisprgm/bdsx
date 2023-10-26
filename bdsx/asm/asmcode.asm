@@ -643,7 +643,7 @@ _pass:
     unwind
     ; original codes
     mov rax, [r15]
-    lea rdx, [r14+0x208]
+    lea rdx, [r14+0x200]
     mov rcx, r15
     mov rax, [rax+0x18]
     jmp __guard_dispatch_icall_fptr
