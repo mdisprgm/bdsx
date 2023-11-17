@@ -1161,18 +1161,6 @@ ProjectileComponent.prototype.setOwnerId = procHacker.js(
 
 DamageSensorComponent.prototype.isFatal = procHacker.js("?isFatal@DamageSensorComponent@@QEBA_NXZ", bool_t, { this: DamageSensorComponent });
 DamageSensorComponent.prototype.getDamageModifier = procHacker.js("?getDamageModifier@DamageSensorComponent@@QEAAMXZ", float32_t, { this: DamageSensorComponent });
-DamageSensorComponent.prototype.recordDamage = procHacker.js(
-    "?getDamageModifier@DamageSensorComponent@@QEAAMXZ",
-    int64_as_float_t,
-    { this: DamageSensorComponent },
-    int64_as_float_t,
-    Actor,
-    Actor,
-    int32_t,
-    int32_t,
-    int32_t,
-    int64_as_float_t,
-);
 
 CommandBlockComponent.prototype.addAdditionalSaveData = procHacker.js(
     "?addAdditionalSaveData@CommandBlockComponent@@QEBAXAEAVCompoundTag@@@Z",

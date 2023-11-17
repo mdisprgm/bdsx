@@ -1,7 +1,7 @@
 import { Actor, ActorDefinitionIdentifier, ActorType } from "bdsx/bds/actor";
 import { BlockSource } from "bdsx/bds/block";
 import { Vec3 } from "bdsx/bds/blockpos";
-import { ActorWildcardCommandSelector } from "bdsx/bds/command";
+import { ActorCommandSelector } from "bdsx/bds/command";
 import { command } from "bdsx/command";
 import { bedrockServer } from "bdsx/launcher";
 
@@ -53,6 +53,6 @@ command.register("shoot-projectile", "shooting projectiles (arrow, trident, snow
     },
     {
         projectile: command.enum("shoot-projectile.projectile", "arrow", "thrown_trident", "snowball", "ender_pearl"),
-        shooter: [ActorWildcardCommandSelector, true],
+        shooter: [ActorCommandSelector, true],
     },
 );

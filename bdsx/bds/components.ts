@@ -2,7 +2,7 @@ import { abstract } from "../common";
 import { StaticPointer, VoidPointer } from "../core";
 import { CxxVector } from "../cxxvector";
 import { AbstractClass, NativeClass, nativeClass, nativeField } from "../nativeclass";
-import { int32_t, int64_as_float_t, void_t } from "../nativetype";
+import { int32_t, void_t } from "../nativetype";
 import type { Actor, ActorDefinitionIdentifier, ActorUniqueID, ItemActor, Mob } from "./actor";
 import { Vec3 } from "./blockpos";
 import { JsonValue } from "./connreq";
@@ -13,7 +13,7 @@ import { CompoundTag } from "./nbt";
  * defines physics properties of an entity, including if it is affected by gravity or if it collides with objects.
  */
 @nativeClass(null)
-export class PhysicsComponent extends NativeClass {
+export class PhysicsComponent extends AbstractClass {
     setHasCollision(actor: Actor, bool: boolean): void {
         abstract();
     }
@@ -23,12 +23,12 @@ export class PhysicsComponent extends NativeClass {
 }
 
 @nativeClass(null)
-export class SyncedActorDataComponent extends NativeClass {}
+export class SyncedActorDataComponent extends AbstractClass {}
 /**
  * allows the entity to be a thrown entity.
  */
 @nativeClass(null)
-export class ProjectileComponent extends NativeClass {
+export class ProjectileComponent extends AbstractClass {
     public static identifier = "minecraft:projectile";
     shoot(projectile: Actor, shooter: Actor): void {
         abstract();
@@ -66,7 +66,7 @@ export class ProjectileComponent extends NativeClass {
 }
 
 @nativeClass(0x08)
-export class OnHitSubcomponent extends NativeClass {
+export class OnHitSubcomponent extends AbstractClass {
     @nativeField(VoidPointer)
     vftable: VoidPointer;
 
@@ -100,17 +100,11 @@ export class HitResult extends AbstractClass {
  * defines what events to initiate when the entity is damaged by specific entities or items.
  */
 @nativeClass(null)
-export class DamageSensorComponent extends NativeClass {
+export class DamageSensorComponent extends AbstractClass {
     isFatal(): boolean {
         abstract();
     }
     getDamageModifier(): number {
-        abstract();
-    }
-    /**
-     * IDK it's working
-     */
-    recordDamage(int64: int64_as_float_t, actor: Actor, actor2: Actor, num1: number, num2: number, char: number, int64_: int64_as_float_t): number {
         abstract();
     }
 }
@@ -118,7 +112,7 @@ export class DamageSensorComponent extends NativeClass {
  * maybe used for command block minecart.
  */
 @nativeClass(null)
-export class CommandBlockComponent extends NativeClass {
+export class CommandBlockComponent extends AbstractClass {
     addAdditionalSaveData(tag: CompoundTag): void {
         abstract();
     }
@@ -136,7 +130,7 @@ export class CommandBlockComponent extends NativeClass {
  * allows the entity to be named (e.g. using a name tag).
  */
 @nativeClass(null)
-export class NameableComponent extends NativeClass {
+export class NameableComponent extends AbstractClass {
     nameEntity(actor: Actor, name: string): void {
         abstract();
     }
@@ -145,7 +139,7 @@ export class NameableComponent extends NativeClass {
  * minecraft:navigation.climb, minecraft:navigation.float, minecraft:navigation.fly, minecraft:navigation.generic, minecraft:navigation.hover, minecraft:navigation.swim, and minecraft:navigation.walk belong.
  */
 @nativeClass(null)
-export class NavigationComponent extends NativeClass {
+export class NavigationComponent extends AbstractClass {
     protected _createPath(component: NavigationComponent, actor: Actor, target: Actor | Vec3): Path {
         abstract();
     }
@@ -198,17 +192,17 @@ export class NavigationComponent extends NativeClass {
     }
 }
 @nativeClass(null)
-export class Path extends NativeClass {}
+export class Path extends AbstractClass {}
 /**
  * Allows the NPC to use the POI
  */
 @nativeClass(null)
-export class NpcComponent extends NativeClass {}
+export class NpcComponent extends AbstractClass {}
 /**
  * determines whether the entity can be ridden.
  */
 @nativeClass(null)
-export class RideableComponent extends NativeClass {
+export class RideableComponent extends AbstractClass {
     areSeatsFull(ride: Actor): boolean {
         abstract();
     }
@@ -223,7 +217,7 @@ export class RideableComponent extends NativeClass {
  * Defines this entity's inventory properties.
  */
 @nativeClass(null)
-export class ContainerComponent extends NativeClass {
+export class ContainerComponent extends AbstractClass {
     addItem(item: ItemActor): boolean;
     addItem(item: ItemStack, count?: number, data?: number): boolean;
     addItem(item: ItemStack | ItemActor, count?: number, data?: number): boolean {
@@ -246,7 +240,7 @@ export class ContainerComponent extends NativeClass {
  * defines what can push an entity between other entities and pistons.
  */
 @nativeClass(null)
-export class PushableComponent extends NativeClass {
+export class PushableComponent extends AbstractClass {
     pushByActor(actor: Actor, actor2: Actor, bool: boolean): void {
         abstract();
     }
@@ -258,7 +252,7 @@ export class PushableComponent extends NativeClass {
  * defines the entity's ranged attack behavior.
  */
 @nativeClass(null)
-export class ShooterComponent extends NativeClass {
+export class ShooterComponent extends AbstractClass {
     shootProjectile(projectile: Actor, defi: ActorDefinitionIdentifier, power: number): void {
         abstract();
     }
@@ -267,6 +261,6 @@ export class ShooterComponent extends NativeClass {
  * defines the Conditional Spatial Update Bandwidth Optimizations of this entity.
  */
 @nativeClass(null)
-export class ConditionalBandwidthOptimizationComponent extends NativeClass {}
+export class ConditionalBandwidthOptimizationComponent extends AbstractClass {}
 //; struct ConditionalBandwidthOptimization __stdcall __high ConditionalBandwidthOptimizationComponent::getCurrentOptimizationValues(struct Actor *)
 //; void __fastcall ConditionalBandwidthOptimizationComponent::initFromDefinition(ConditionalBandwidthOptimizationComponent *__hidden this, struct Actor *, const struct ConditionalBandwidthOptimizationDefinition *)

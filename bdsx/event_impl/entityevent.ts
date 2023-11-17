@@ -15,6 +15,7 @@ import { makefunc } from "../makefunc";
 import { bool_t, float32_t, int32_t, uint8_t, void_t } from "../nativetype";
 import { Wrapper } from "../pointer";
 import { procHacker } from "../prochacker";
+
 export class EntityHurtEvent {
     constructor(public entity: Mob, public damage: number, public damageSource: ActorDamageSource, public knock: boolean, public ignite: boolean) {}
 }
