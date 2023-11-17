@@ -1494,7 +1494,7 @@ export class Actor extends AbstractClass {
     protected _tryGetComponent(actor: Actor, comp: string): any | null {
         abstract();
     }
-    tryGetComponent<T extends ComponentsClassMap[K], K extends keyof ComponentsClassMap>(comp: K): T | null {
+    tryGetComponent<K extends keyof ComponentsClassMap, T extends ComponentsClassMap[K]>(comp: K): T | null {
         return this._tryGetComponent(this, comp);
     }
 }
