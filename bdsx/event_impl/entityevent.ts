@@ -1,5 +1,6 @@
-import { Actor, ActorDamageCause, ActorDamageSource, DimensionId, HitResult, Mob, ProjectileComponent, SplashPotionEffectSubcomponent } from "../bds/actor";
+import { Actor, ActorDamageCause, ActorDamageSource, DimensionId, Mob } from "../bds/actor";
 import { BlockPos, Vec3 } from "../bds/blockpos";
+import { HitResult, ProjectileComponent, SplashPotionEffectSubcomponent } from "../bds/components";
 import { ComplexInventoryTransaction, ContainerId, HandSlot, InventorySource, InventorySourceType, ItemStack, ItemStackBase } from "../bds/inventory";
 import { BedSleepingResult } from "../bds/level";
 import { ServerNetworkHandler } from "../bds/networkidentifier";
@@ -14,7 +15,6 @@ import { makefunc } from "../makefunc";
 import { bool_t, float32_t, int32_t, uint8_t, void_t } from "../nativetype";
 import { Wrapper } from "../pointer";
 import { procHacker } from "../prochacker";
-
 export class EntityHurtEvent {
     constructor(public entity: Mob, public damage: number, public damageSource: ActorDamageSource, public knock: boolean, public ignite: boolean) {}
 }

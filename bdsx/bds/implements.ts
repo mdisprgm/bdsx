@@ -47,30 +47,14 @@ import {
     ActorRuntimeID,
     ActorType,
     ActorUniqueID,
-    CommandBlockComponent,
-    ConditionalBandwidthOptimizationComponent,
-    ContainerComponent,
-    DamageSensorComponent,
     DimensionId,
     DistanceSortedActor,
     EntityContext,
     EntityContextBase,
     EntityRefTraits,
-    HitResult,
     ItemActor,
     Mob,
-    NameableComponent,
-    NavigationComponent,
-    NpcComponent,
-    OnHitSubcomponent,
     OwnerStorageEntity,
-    Path,
-    PhysicsComponent,
-    ProjectileComponent,
-    PushableComponent,
-    RideableComponent,
-    ShooterComponent,
-    SyncedActorDataComponent,
     SynchedActorDataEntityWrapper,
     WeakEntityRef,
 } from "./actor";
@@ -97,6 +81,24 @@ import {
 import { CommandName } from "./commandname";
 import { CommandOrigin, ServerCommandOrigin, VirtualCommandOrigin } from "./commandorigin";
 import "./commandparsertypes";
+import {
+    CommandBlockComponent,
+    ConditionalBandwidthOptimizationComponent,
+    ContainerComponent,
+    DamageSensorComponent,
+    HitResult,
+    NameableComponent,
+    NavigationComponent,
+    NpcComponent,
+    OnHitSubcomponent,
+    Path,
+    PhysicsComponent,
+    ProjectileComponent,
+    PushableComponent,
+    RideableComponent,
+    ShooterComponent,
+    SyncedActorDataComponent,
+} from "./components";
 import { Certificate, ConnectionRequest, JsonValue } from "./connreq";
 import { CxxOptional, CxxOptionalToUndefUnion } from "./cxxoptional";
 import { Dimension } from "./dimension";
@@ -1103,7 +1105,7 @@ const getConditionalBandwidthComponent = procHacker.js(
     Actor,
 );
 
-(Actor.prototype as any)._getComponent = (actor: Actor, comp: string) => {
+(Actor.prototype as any)._tryGetComponent = (actor: Actor, comp: string) => {
     switch (comp) {
         case "minecraft:projectile":
             return getProjectileComponent(actor);
@@ -1189,7 +1191,6 @@ NameableComponent.prototype.nameEntity = procHacker.js(
     Actor,
     CxxString,
 );
-
 const NavigationComponent$$createPath$$Actor = procHacker.js(
     "?createPath@NavigationComponent@@QEAA?AV?$unique_ptr@VPath@@U?$default_delete@VPath@@@std@@@std@@AEAVMob@@AEAVActor@@@Z",
     Path.ref(),
@@ -1272,17 +1273,14 @@ const containerComponent$$addItem$$ItemStack$$count = procHacker.js(
         return containerComponent$$addItem$$ItemStack(component, item);
     }
 };
-
 ContainerComponent.prototype.getEmptySlotsCount = procHacker.js("?getEmptySlotsCount@ContainerComponent@@QEBAHXZ", int64_as_float_t, { this: ContainerComponent });
 ContainerComponent.prototype.getSlots = procHacker.js(
     "?getSlots@ContainerComponent@@QEBA?BV?$vector@PEBVItemStack@@V?$allocator@PEBVItemStack@@@std@@@std@@XZ",
     CxxVector.make(ItemStack.ref()),
     { this: Container, structureReturn: true },
 );
-
 PushableComponent.prototype.pushByActor = procHacker.js("?push@PushableComponent@@QEAAXAEAVActor@@0_N@Z", void_t, { this: PushableComponent }, Actor, Actor, bool_t);
 PushableComponent.prototype.pushByPos = procHacker.js("?push@PushableComponent@@QEAAXAEAVActor@@0_N@Z", void_t, { this: PushableComponent }, Actor, Vec3);
-
 ShooterComponent.prototype.shootProjectile = procHacker.js(
     "?_shootProjectile@ShooterComponent@@AEAAXAEAVActor@@AEBUActorDefinitionIdentifier@@H@Z",
     void_t,
