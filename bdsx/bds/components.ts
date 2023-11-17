@@ -1,8 +1,8 @@
 import { abstract } from "../common";
 import { StaticPointer, VoidPointer } from "../core";
 import { CxxVector } from "../cxxvector";
-import { AbstractClass, NativeClass, nativeClass, nativeField } from "../nativeclass";
-import { int32_t, void_t } from "../nativetype";
+import { AbstractClass, nativeClass, nativeField } from "../nativeclass";
+import { bool_t, int32_t, void_t } from "../nativetype";
 import type { Actor, ActorDefinitionIdentifier, ActorUniqueID, ItemActor, Mob } from "./actor";
 import { Vec3 } from "./blockpos";
 import { JsonValue } from "./connreq";
@@ -221,10 +221,10 @@ export class ContainerComponent extends AbstractClass {
     addItem(item: ItemActor): boolean;
     addItem(item: ItemStack, count?: number, data?: number): boolean;
     addItem(item: ItemStack | ItemActor, count?: number, data?: number): boolean {
-        return this._addItem(this, item, count, data);
+        return this._addItem(item, count, data);
     }
 
-    protected _addItem(component: ContainerComponent, item: ItemStack | ItemActor, count?: number, data: number = 0): boolean {
+    protected _addItem(item: ItemStack | ItemActor, count?: number, data: number = 0): boolean {
         abstract();
     }
 
@@ -241,10 +241,12 @@ export class ContainerComponent extends AbstractClass {
  */
 @nativeClass(null)
 export class PushableComponent extends AbstractClass {
-    pushByActor(actor: Actor, actor2: Actor, bool: boolean): void {
-        abstract();
+    push(actor: Actor, pos: Vec3): void;
+    push(actor: Actor, actor2: Actor, bool: boolean): void;
+    push(actor: Actor, arg2: Vec3 | Actor, arg3?: bool_t): void {
+        this._push(actor, arg2, arg3);
     }
-    pushByPos(actor: Actor, pos: Vec3): void {
+    protected _push(actor: Actor, arg2: Vec3 | Actor, arg3?: bool_t): void {
         abstract();
     }
 }
